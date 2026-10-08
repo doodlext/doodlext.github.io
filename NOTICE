@@ -1,0 +1,114 @@
+Astro Blog Template
+===================
+
+This project is licensed under the Creative Commons Attribution 4.0
+International License (CC BY 4.0). See the `LICENSE` file for the full
+legal text, or visit:
+
+    https://creativecommons.org/licenses/by/4.0/
+
+
+Attribution
+-----------
+
+This project is an Adaptation, in the sense of CC BY 4.0 §1(a), of:
+
+    research-article-template
+    Copyright (c) 2025 Thibaud Frere
+    Licensed under CC BY 4.0
+    Source: https://huggingface.co/spaces/tfrere/research-article-template
+
+Per CC BY 4.0 §3(a), the following identification is preserved:
+
+    Creator:    Thibaud Frere (https://huggingface.co/tfrere)
+    Work:       research-article-template
+    License:    CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+    Source URI: https://huggingface.co/spaces/tfrere/research-article-template
+
+
+Modifications
+-------------
+
+This Adapted Material modifies the original work as follows:
+
+  * Reframed the project from a single-article research template into a
+    multi-post personal-blog scaffolding.
+  * Added a Home page (`src/pages/index.astro`) with an avatar, slogan,
+    news feed, and a list of latest posts.
+  * Added a Blog index page (`src/pages/blog.astro`).
+  * Added an About page (`src/pages/about.astro`) with placeholder
+    content.
+  * Added a Browse page (`src/pages/browse.astro`) with client-side
+    search, tag and category filters, and a year archive.
+  * Added a generic site header/footer (`src/components/Header.astro`,
+    `src/components/SiteFooter.astro`).
+  * Added utilities for article discovery and date formatting
+    (`src/utils/site-articles.ts`, `src/utils/article-modified.ts`,
+    `src/utils/date-format.ts`, `src/utils/browse-links.ts`).
+  * Added RSS and sitemap endpoints (`src/pages/rss.xml.js`,
+    `src/pages/sitemap-index.xml.js`).
+  * Added a typed content collection schema (`src/content.config.ts`)
+    documenting the article frontmatter.
+  * Replaced the upstream `package.json` metadata, removed the
+    `release:*` scripts, and switched the SPDX license identifier to
+    `CC-BY-4.0`.
+  * Replaced the production `site` URL in `astro.config.mjs` with a
+    placeholder.
+  * Slimmed `src/content/bibliography.bib` to only the entries cited by
+    the bundled demo article.
+  * Generalized site-wide constants (`src/consts.ts`), the news feed
+    (`src/data/site-news.ts`), and the About page into reusable
+    placeholders.
+  * Added a placeholder avatar (`public/avatar.svg`) and a generic
+    `public/robots.txt`.
+  * Removed personal-site artifacts: avatar JPGs, custom CNAME, Google
+    Search Console verification file, WeChat QR, etc.
+  * Added this NOTICE file and a new README focused on template usage.
+
+Per CC BY 4.0 §3(a)(1)(B), this is sufficient notice that the work has
+been modified. In the upstream blog template, the bundled showcase article in
+`src/content/demo/` retained its original credit line. This downstream
+adaptation replaces that showcase as described below.
+
+
+Downstream attribution
+----------------------
+
+If you build a website on top of this template and publish it, please
+keep:
+
+  1. A link in your site footer (the default `SiteFooter.astro` already
+     credits Thibaud's research-article-template).
+  2. This `NOTICE` file in your repository if you redistribute the
+     source.
+
+You do *not* have to credit anyone in the rendered articles you write
+yourself — those are entirely your own work. The attribution
+requirement is only for the template scaffolding and any portion of
+the demo article you keep.
+
+
+Downstream academic homepage adaptation (2026-10-08)
+--------------------------------------------------
+
+Immediate source: astro-blog-template by MaoSong2022
+Source URI: https://github.com/MaoSong2022/astro-blog-template
+License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+
+Changes in this downstream adaptation:
+  * Replaced the original showcase with one short placeholder research note.
+  * Removed showcase-only charts, datasets, images, audio, and sprites.
+  * Added a personal publications page with conference and preprint groups.
+  * Adapted the homepage with a profile sidebar, research interests, news,
+    and academic service; removed the redundant About page.
+  * Added responsive homepage, publication, and blog reading styles.
+  * Replaced the placeholder avatar with a user-provided illustration.
+  * Replaced importer-specific author metadata and bibliography with
+    generic opt-in examples, and excluded private importer configuration.
+  * Added GitHub Pages deployment for doodlext.github.io.
+  * Removed unpublished profile timeline data and obsolete About components;
+    retained only personal information used by the current public pages.
+  * Removed the default third-party analytics script.
+  * Preserved upstream license and attribution, and added the immediate
+    source attribution and modification notice to both page footers.
+  * Left the license for independently authored articles unspecified.

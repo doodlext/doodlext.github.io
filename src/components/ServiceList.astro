@@ -1,0 +1,17 @@
+---
+import { ACADEMIC_SERVICES } from "../data/services";
+---
+
+<div class="service-list">
+  {ACADEMIC_SERVICES.map((service) => (
+    <p class="service-list__item">
+      {service.role}: <strong>{service.fullName ? <abbr title={service.fullName}>{service.venue}</abbr> : service.venue}</strong>.
+    </p>
+  ))}
+</div>
+
+<style>
+  .service-list { display: grid; gap: 0.375rem; }
+  .service-list .service-list__item { margin: 0; line-height: 1.5; }
+  abbr { text-decoration: none; }
+</style>

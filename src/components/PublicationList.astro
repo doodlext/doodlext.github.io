@@ -1,0 +1,99 @@
+---
+import { PUBLICATIONS } from "../data/publications";
+import { SITE_AUTHOR } from "../consts";
+
+interface Props {
+  headingLevel?: 2 | 3;
+}
+
+const { headingLevel = 2 } = Astro.props;
+const GroupHeading = headingLevel === 2 ? "h2" : "h3";
+const PaperHeading = headingLevel === 2 ? "h3" : "h4";
+const groups = [
+  { category: "conference", label: "Conference Papers" },
+  { category: "preprint", label: "Preprints" },
+].map((group) => ({
+  ...group,
+  publications: PUBLICATIONS.filter((publication) => publication.category === group.category)
+    .sort((a, b) => b.date.localeCompare(a.date)),
+}));
+---
+{groups.filter((group) => group.publications.length > 0).map((group) => (
+<section class="publication-group" aria-labelledby={`publications-${group.category}`}>
+  <GroupHeading class="publication-group__heading" id={`publications-${group.category}`}>{group.label}</GroupHeading>
+  <ul class="article-index">
+  {group.publications.map((publication) => (
+    <li class="article-index__item publication-item">
+      <PaperHeading class="publication-title">{publication.title}</PaperHeading>
+      <p class="publication-authors">
+        {publication.authors.map((author, index) => (
+          <span>
+            {index > 0 ? ", " : ""}{author.replace(/\*+$/, "") === SITE_AUTHOR ? <strong>{author}</strong> : author}
+          </span>
+        ))}
+      </p>
+      <p class="article-index__meta publication-meta">{publication.venue}{publication.venue ? " · " : ""}{publication.date.slice(0, 4)}</p>
+      {publication.links.length > 0 && (
+        <div class="article-index__tags publication-links">
+          {publication.links.map((link) => (
+            <a class="article-index__tag" href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
+          ))}
+        </div>
+      )}
+    </li>
+  ))}
+  </ul>
+</section>
+))}
+<style>
+  .publication-group + .publication-group {
+    margin-top: 2rem;
+  }
+
+  .publication-group > .publication-group__heading {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--surface-bg));
+    border-left: 3px solid var(--primary-color);
+    border-bottom: none;
+  }
+
+  .publication-group > .article-index {
+    margin-top: 0;
+  }
+
+  .publication-group .publication-item {
+    gap: 0.25rem;
+    margin-bottom: 0;
+    padding: 1.125rem 0;
+  }
+
+  .publication-group .publication-item:first-child {
+    border-top: none;
+  }
+
+  .publication-item > .publication-title,
+  .publication-item > .publication-authors,
+  .publication-item > .publication-meta {
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .publication-title {
+    font-size: 1.0625rem;
+    font-weight: 600;
+  }
+
+  .publication-authors {
+    font-size: 0.9375rem;
+  }
+
+  .publication-item > .publication-links {
+    gap: 0.5rem;
+    margin-top: 0.375rem;
+  }
+</style>

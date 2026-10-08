@@ -1,0 +1,9 @@
+{
+  "pages": [
+    {
+      "id": "YOUR_NOTION_PAGE_ID",
+      "title": "Article title",
+      "slug": "article-title"
+    }
+  ]
+}

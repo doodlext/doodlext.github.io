@@ -1,0 +1,38 @@
+---
+title: "Example research note"
+description: "A starter post with a formula, citation, and reusable note component."
+published: "2026-10-05"
+category: "Research notes"
+tags:
+  - example
+showPdf: false
+---
+
+import Note from "../../components/Note.astro";
+
+<Note variant="info" emoji="📝">
+  This is a placeholder post, not a research result.
+</Note>
+
+## Research question
+
+Introduce the question and explain why it matters.
+
+## Method
+
+Describe your method. For example, an optimization update can be written as
+
+$$
+\theta_{t+1} = \theta_t - \eta \nabla L(\theta_t).
+$$
+
+A related optimizer is Adam [@kingma2015adam].
+
+```python
+def update(parameter, gradient, learning_rate):
+    return parameter - learning_rate * gradient
+```
+
+## Findings
+
+Add your observations, limitations, and next steps here.

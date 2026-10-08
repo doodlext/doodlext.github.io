@@ -1,0 +1,78 @@
+---
+import { SITE_NEWS } from "../data/site-news";
+
+const newsItems = [...SITE_NEWS].sort((a, b) => b.date.localeCompare(a.date));
+
+function newsDateLabel(raw: string): string {
+  const t = Date.parse(raw);
+  if (Number.isNaN(t)) return raw;
+  return new Date(t).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    ...(/^\d{4}-\d{2}$/.test(raw) ? {} : { day: "numeric" }),
+    timeZone: "UTC",
+  });
+}
+---
+
+<ul class="news-list">
+  {newsItems.map((item) => (
+    <li class="news-list__item">
+      <time class="news-list__date" datetime={item.date}>{newsDateLabel(item.date)}</time>
+      <p class="news-list__body">
+        {item.content.map((part) => {
+          if (typeof part === "string") return part;
+          const isExternal = /^https?:\/\//.test(part.href);
+          return (
+            <a
+              href={part.href}
+              {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            >{part.text}</a>
+          );
+        })}
+      </p>
+    </li>
+  ))}
+</ul>
+
+<style>
+  ul.news-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .news-list__item {
+    display: grid;
+    grid-template-columns: 5rem minmax(0, 1fr);
+    align-items: baseline;
+    gap: clamp(0.75rem, 2vw, 1.25rem);
+    margin: 0;
+  }
+
+  .news-list__date {
+    color: var(--muted-color);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  p.news-list__body {
+    min-width: 0;
+    margin: 0;
+    line-height: 1.65;
+    overflow-wrap: break-word;
+    text-wrap: pretty;
+  }
+
+  @media (max-width: 30rem) {
+    ul.news-list { gap: 1rem; }
+    .news-list__item {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.125rem;
+    }
+  }
+</style>

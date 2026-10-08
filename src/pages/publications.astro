@@ -1,0 +1,28 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PublicationList from "../components/PublicationList.astro";
+---
+<BaseLayout pageTitle="Publications" description="Research publications." hideTitle>
+  <header class="publications-header">
+    <h1>Publications</h1>
+    <p class="publication-note"><em>* denotes equal contribution.</em></p>
+  </header>
+  <PublicationList />
+</BaseLayout>
+
+<style>
+  .publications-header {
+    margin-bottom: clamp(1.25rem, 3vw, 1.5rem);
+  }
+
+  .publications-header > h1 {
+    margin: 0 0 0.625rem;
+  }
+
+  .publications-header > .publication-note {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--muted-color);
+  }
+</style>

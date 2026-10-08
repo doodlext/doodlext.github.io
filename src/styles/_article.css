@@ -1,0 +1,273 @@
+/* Shared reading layout for every blog post, including future MD/MDX posts. */
+.article-page {
+  --article-reading-width: 44rem;
+  --article-gutter: clamp(1rem, 3vw, 2rem);
+  --article-column-gap: clamp(1.25rem, 2.5vw, 2rem);
+  --article-section-space: clamp(2rem, 4vw, 3rem);
+}
+
+.article-page .content-grid,
+.article-page .footer-inner {
+  width: 100%;
+  max-width: 1280px;
+  padding-inline: var(--article-gutter);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--article-reading-width)) minmax(0, 1fr);
+  gap: var(--article-column-gap);
+}
+
+.article-page .content-grid {
+  margin-top: clamp(1.5rem, 4vw, 3rem);
+  overflow: visible;
+}
+
+.article-page .content-grid > .table-of-contents {
+  grid-column: 1;
+  min-width: 0;
+  margin-top: 0;
+  overflow-wrap: break-word;
+}
+
+.article-page .article-prose {
+  grid-column: 2;
+  width: 100%;
+  min-width: 0;
+  font-size: clamp(1rem, 0.95rem + 0.18vw, 1.0625rem);
+  line-height: 1.75;
+  overflow-wrap: break-word;
+}
+
+.article-page .article-prose p {
+  line-height: inherit;
+  text-wrap: pretty;
+}
+
+.article-page .article-prose > p {
+  margin-bottom: 1.1em;
+  text-align: justify;
+}
+
+.article-page .article-prose :is(h2, h3, h4) {
+  text-wrap: balance;
+  scroll-margin-top: 1rem;
+}
+
+.article-page .article-prose h2 {
+  font-size: clamp(1.375rem, 1.15rem + 0.6vw, 1.75rem);
+  margin-block: var(--article-section-space) 0.75em;
+  padding-bottom: 0.35em;
+}
+
+.article-page .article-prose h3 {
+  font-size: clamp(1.125rem, 1rem + 0.4vw, 1.375rem);
+  margin-block: 1.75em 0.65em;
+}
+
+.article-page .article-prose h4 {
+  margin-block: 1.5em 0.5em;
+}
+
+.article-page .article-prose li {
+  margin-bottom: 0.5em;
+  text-wrap: pretty;
+}
+
+.article-page .article-prose a {
+  overflow-wrap: anywhere;
+}
+
+.article-page .article-prose :not(pre) > code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 0.875em;
+}
+
+.article-page .article-prose :is(.code-card, .code-output, .table-scroll) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep code indentation and mathematical notation intact; scroll locally. */
+.article-page .article-prose pre:not([data-language="text"]),
+.article-page .article-prose pre:not([data-language="text"]) code {
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  text-align: start;
+}
+
+.article-page .article-prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.article-page .article-prose .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+  overscroll-behavior-inline: contain;
+}
+
+.article-page .article-prose .katex {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.article-page .article-prose .table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.article-page .article-prose .table-scroll > table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.article-page .article-prose :is(th, td) {
+  min-width: 7rem;
+  max-width: 22rem;
+  white-space: normal;
+  overflow-wrap: break-word;
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+.article-page .article-prose > figure {
+  margin: 1.5em 0;
+}
+
+.article-page .article-prose :is(img, picture, video) {
+  max-width: 100%;
+  height: auto;
+}
+
+.article-page .article-prose :is(iframe, canvas) {
+  max-width: 100%;
+}
+
+.article-page .hero {
+  padding: clamp(2rem, 5vw, 4rem) var(--article-gutter) 1rem;
+}
+
+.article-page .hero-title {
+  max-width: min(100%, 50rem);
+  overflow-wrap: break-word;
+}
+
+.article-page .hero-desc {
+  max-width: min(100%, var(--article-reading-width));
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.article-page header.meta .meta-container {
+  max-width: calc(var(--article-reading-width) + 2 * var(--article-gutter));
+  padding-inline: var(--article-gutter);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 1rem;
+}
+
+.article-page header.meta .meta-container .meta-container-cell {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.article-page header.meta .authors li {
+  white-space: normal;
+}
+
+.article-page .toc-mobile-toggle {
+  top: auto;
+  bottom: 1rem;
+  left: var(--article-gutter);
+}
+
+.article-page .footer {
+  margin-top: var(--article-section-space);
+}
+
+.article-page .footer-inner {
+  padding-block: var(--article-section-space);
+}
+
+.article-page .footer-inner > *,
+.article-page .footer-inner :is(pre, p, li) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.article-page .footer-inner .footer-heading {
+  padding-right: 0;
+}
+
+.article-page .footer-inner .references-block:empty {
+  display: none;
+}
+
+.article-page .template-credit {
+  display: block;
+  grid-column: 2;
+}
+
+/* Match the shared TOC collapse breakpoint and its mobile drawer behavior. */
+@media (max-width: 1100px) {
+  .article-page .content-grid,
+  .article-page .footer-inner {
+    grid-template-columns: minmax(0, var(--article-reading-width));
+    justify-content: center;
+  }
+
+  .article-page .article-prose,
+  .article-page .template-credit {
+    grid-column: 1;
+  }
+
+  .article-page .footer-inner :is(.citation-block, .references-block, .reuse-block, .doi-block) {
+    display: block;
+  }
+
+  .article-page .footer-inner .footer-heading {
+    text-align: start;
+    margin-block: 0 0.75rem;
+  }
+
+  .article-page .references-block ol {
+    margin-left: 0;
+    padding-left: 1.25rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .article-page .article-prose > p {
+    text-align: start;
+  }
+}
+
+/* Keep the optional project-paper template's single-column layout. */
+[data-template="paper"] .article-page .content-grid,
+[data-template="paper"] .article-page .footer-inner {
+  grid-template-columns: minmax(0, var(--article-reading-width));
+  justify-content: center;
+}
+
+[data-template="paper"] .article-page .article-prose,
+[data-template="paper"] .article-page .template-credit {
+  grid-column: 1;
+}
+
+@media print {
+  .article-page .article-prose { grid-column: 1; }
+  .article-page .footer-inner { display: block; }
+  .article-page .article-prose pre:not([data-language="text"]),
+  .article-page .article-prose pre:not([data-language="text"]) code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}

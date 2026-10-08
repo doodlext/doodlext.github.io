@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">XT — Xuan Tang</title>
+  <rect width="64" height="64" rx="14" fill="#2477ad" />
+  <g fill="#f6fbff">
+    <path d="M8 14h7l4.5 11L24 14h7l-7.5 18L31 50h-7l-4.5-11L15 50H8l7.5-18Z" />
+    <path d="M35 14h22v7h-7.5v29h-7V21H35Z" />
+  </g>
+</svg>

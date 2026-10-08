@@ -1,0 +1,67 @@
+---
+import HeaderLink from "./HeaderLink.astro";
+import ThemeToggle from "./ThemeToggle.astro";
+---
+
+<header>
+  <nav>
+    <h2><a href="/">Homepage</a></h2>
+    <div class="nav-actions">
+      <div class="internal-links">
+        <HeaderLink href="/publications">Publications</HeaderLink>
+        <HeaderLink href="/blog">Blog</HeaderLink>
+      </div>
+      <ThemeToggle variant="inline" />
+    </div>
+  </nav>
+</header>
+<style>
+  header {
+    margin: 0;
+    padding: 0 1em;
+    background: var(--page-bg);
+    box-shadow: 0 1px 0 var(--border-color);
+    transition:
+      background-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  h2 {
+    margin: 0;
+    font-size: 1em;
+  }
+
+  h2 a,
+  h2 a.active {
+    text-decoration: none;
+    color: var(--text-color);
+  }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-3);
+  }
+  .nav-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-2);
+    max-width: 100%;
+  }
+  .internal-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  nav a {
+    padding: 1em 0.5em;
+    color: var(--text-color);
+    border-bottom: 4px solid transparent;
+    text-decoration: none;
+  }
+  nav a.active {
+    text-decoration: none;
+    border-bottom-color: var(--primary-color);
+  }
+</style>

@@ -1,0 +1,178 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import NewsList from "../components/NewsList.astro";
+import ServiceList from "../components/ServiceList.astro";
+import {
+  SITE_DESCRIPTION,
+  SITE_EMAIL_HREF,
+  SITE_TITLE,
+  SITE_SCHOLAR_URL,
+} from "../consts";
+import { SITE_NEWS } from "../data/site-news";
+---
+
+<BaseLayout pageTitle={SITE_TITLE} description={SITE_DESCRIPTION} hideTitle contentClass="site-page--home">
+  <div class="home-layout">
+    <aside class="profile-sidebar" aria-labelledby="profile-name">
+      <img
+        class="profile-avatar"
+        src="/avatar.png"
+        alt="Illustrated portrait of Xuan Tang"
+        width="512"
+        height="512"
+        loading="eager"
+        decoding="async"
+      />
+      <h1 id="profile-name">{SITE_TITLE}</h1>
+      <p class="profile-affiliation">
+        The University of Hong Kong
+      </p>
+      <div class="profile-links">
+        <a class="button profile-link" href={SITE_EMAIL_HREF}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3 6 9 7 9-7" />
+          </svg>
+          Email
+        </a>
+        <a class="button profile-link" href={SITE_SCHOLAR_URL} target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <path d="m2 9 10-5 10 5-10 5-10-5Z" />
+            <path d="M6 11v6c4 3 8 3 12 0v-6M22 9v8" />
+          </svg>
+          Google Scholar
+        </a>
+      </div>
+    </aside>
+    <div class="home-main">
+      <h2 class="home-heading">About me</h2>
+      <div class="home-introduction">
+    <p>
+      I'm a second-year PhD student in the School of Computing and Data Science at
+      <strong>The University of Hong Kong</strong>, privileged to be supervised by
+      <a href="https://difanzou.github.io" target="_blank" rel="noopener noreferrer">Prof. Difan Zou</a>.
+      Previously, I received my B.Sc. in Computer Science and Technology from
+      <strong>Nanjing University</strong>.
+    </p>
+    <p>
+      My research interests are <strong>learning theory</strong> and <strong>LLM optimization</strong>.
+      I focus on understanding modern deep learning and pushing the frontiers of learning systems
+      through theory and practice.
+    </p>
+  </div>
+
+  {
+    SITE_NEWS.length > 0 ? (
+      <section class="home-section" aria-labelledby="news-heading">
+        <h2 class="home-heading" id="news-heading">News &amp; Updates</h2>
+        <NewsList />
+      </section>
+    ) : null
+  }
+      <section class="home-section" aria-labelledby="services-heading">
+        <h2 class="home-heading" id="services-heading">Services</h2>
+        <ServiceList />
+      </section>
+    </div>
+  </div>
+
+  <style>
+    .home-layout {
+      /* The sidebar fits its content; the gap grows gently with the viewport. */
+      --home-sidebar-width: 14rem;
+      --home-column-gap: clamp(1.25rem, 3vw, 2.5rem);
+      display: grid;
+      grid-template-columns: fit-content(var(--home-sidebar-width)) minmax(0, 1fr);
+      grid-template-areas: "profile main";
+      align-items: start;
+      column-gap: var(--home-column-gap);
+    }
+
+    .home-main {
+      grid-area: main;
+      min-width: 0;
+      font-size: clamp(1rem, 0.97rem + 0.12vw, 1.0625rem);
+      overflow-wrap: break-word;
+    }
+    .home-main .home-heading {
+      margin: 0 0 clamp(0.75rem, 1.5vw, 1rem);
+      padding: 0;
+      border: none;
+      font-size: clamp(1.25rem, 1.1rem + 0.4vw, 1.4375rem);
+      line-height: 1.3;
+    }
+    .home-introduction {
+      text-align: justify;
+      text-justify: inter-word;
+    }
+    .home-main .home-introduction p {
+      margin: 0 0 1rem;
+      line-height: 1.7;
+      text-wrap: pretty;
+    }
+    .home-main .home-introduction p:last-child { margin-bottom: 0; }
+    .home-introduction strong,
+    .home-introduction a { hyphens: none; }
+    .home-section { margin-top: clamp(1.5rem, 3vw, 2rem); }
+    .profile-sidebar { grid-area: profile; min-width: 0; }
+    .profile-avatar {
+      display: block;
+      width: 136px;
+      height: 136px;
+      object-fit: cover;
+      border-radius: 50%;
+      border: 2px solid var(--border-color);
+    }
+    .profile-sidebar h1 {
+      margin: 1rem 0 0;
+      font-size: 1.75rem;
+      line-height: 1.2;
+    }
+    .profile-sidebar .profile-affiliation {
+      margin: 0.75rem 0 0.375rem;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      color: var(--muted-color);
+      white-space: nowrap;
+    }
+    .profile-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+    .profile-sidebar .profile-link {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-height: 2rem;
+      padding: 0.25rem 0;
+      border: none;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      color: var(--text-color);
+      font-size: 0.9375rem;
+      font-weight: 400;
+      text-decoration: none;
+    }
+    .profile-sidebar .profile-link:hover { color: var(--primary-color); }
+    .profile-link svg { flex-shrink: 0; }
+    .profile-sidebar .profile-link { white-space: nowrap; }
+    @media (max-width: 48rem) {
+      .home-layout {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "profile" "main";
+        gap: clamp(1.5rem, 4vw, 2rem);
+      }
+      .profile-sidebar {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+      .profile-avatar { width: 112px; height: 112px; }
+      .profile-links { align-items: center; }
+      .home-introduction { text-align: start; }
+    }
+  </style>
+</BaseLayout>
