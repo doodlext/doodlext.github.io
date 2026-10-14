@@ -17,7 +17,7 @@ Open <http://localhost:4321>. Use `npm run build` to generate `dist/`, or `npm r
 
 ## Content locations
 
-Personal information in this repository is limited to the public introduction, contact links, publications, news, and academic service shown on the current site. One example blog post is kept as a writing template; replace or remove it when you are ready to publish your own posts.
+Personal information in this repository is limited to the public introduction, contact links, publications, news, and academic service shown on the current site.
 
 | Content | Edit this file |
 | --- | --- |
@@ -28,7 +28,6 @@ Personal information in this repository is limited to the public introduction, c
 | Homepage academic service | `src/data/services.ts` |
 | Publications list, displayed on the separate Publications page | `src/data/publications.ts` |
 | Homepage News & Updates | `src/data/site-news.ts` |
-| Blog example | `src/content/example-post/article.mdx` |
 | First research blog (English) | `src/content/rethinking-weight-decay/article.mdx` |
 | First research blog (中文) | `src/content/rethinking-weight-decay-zh/article.mdx` |
 | Bibliography | `src/content/bibliography.bib` |
@@ -36,9 +35,9 @@ Personal information in this repository is limited to the public introduction, c
 
 ### Adding a blog post
 
-Copy `src/content/example-post/`, rename the directory, and update the frontmatter and content in `article.mdx`. The directory name becomes the `/blog/<directory-name>/` URL. Blog, Browse, RSS, and the sitemap discover posts automatically. The homepage shows the introduction, News & Updates, and Services.
+Create `src/content/<post-name>/article.mdx` with frontmatter containing `title`, `description`, and `published`, followed by the article content. The directory name becomes the `/blog/<post-name>/` URL. Blog, Browse, RSS, and the sitemap discover posts automatically. The homepage shows the introduction, News & Updates, and Services.
 
-The example includes a formula, Python code, a `Note` component, and an Adam citation. It is a starter example rather than a personal publication record. Authors default to `SITE_AUTHOR`, or can be specified in the frontmatter with `authors`.
+Posts support formulas, code blocks, citations, and the reusable `Note` component. Authors default to `SITE_AUTHOR`, or can be specified in the frontmatter with `authors`.
 
 The first research post is available at `/blog/rethinking-weight-decay/`, with a Chinese translation at `/blog/rethinking-weight-decay-zh/`. Each version declares `language`, `translationUrl`, and `translationLabel` in its frontmatter; the Chinese translation also uses `hiddenFromIndex: true` so Blog, Browse, RSS, and the sitemap list the English post only. Use the same pattern for future translations.
 
@@ -155,7 +154,7 @@ This configuration supports a personal Pages repository at the domain root. Proj
 
 ### This adaptation
 
-The blog template has been organized as an academic homepage. The original showcase article was replaced with one short research-note example; showcase-only charts, datasets, and media were removed; a separate Publications page was added; the homepage contains the personal introduction, research interests, three news updates, and academic service; the redundant About page was removed; and the default third-party analytics script was removed. The two-level upstream credit and license information remain in the page footers and repository files.
+The blog template has been organized as an academic homepage. The original showcase article and the placeholder research note were replaced with a bilingual research blog; showcase-only charts, datasets, and media were removed; a separate Publications page was added; the homepage contains the personal introduction, research interests, three news updates, and academic service; the redundant About page was removed; and the default third-party analytics script was removed. The two-level upstream credit and license information remain in the page footers and repository files.
 
 ## License
 

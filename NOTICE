@@ -97,6 +97,7 @@ License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
 
 Changes in this downstream adaptation:
   * Replaced the original showcase with one short placeholder research note.
+  * Removed the placeholder note after adding the bilingual research blog.
   * Removed showcase-only charts, datasets, images, audio, and sprites.
   * Added a personal publications page with conference and preprint groups.
   * Adapted the homepage with a profile sidebar, research interests, news,

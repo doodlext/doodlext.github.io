@@ -179,7 +179,7 @@ export default function generateLlmsTxt() {
     hooks: {
       "astro:build:done": async ({ dir }) => {
         const cwd = process.cwd();
-        const bundleDir = resolve(cwd, "src/content/example-post");
+        const bundleDir = resolve(cwd, "src/content/rethinking-weight-decay");
         const articleFile = resolve(bundleDir, "article.mdx");
 
         let raw;
