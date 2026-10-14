@@ -1,0 +1,39 @@
+\documentclass[11pt,border=10pt]{standalone}
+\usepackage{amsmath,amssymb}
+\usepackage{algpseudocode}
+\usepackage{lmodern}
+\begin{document}
+\begin{minipage}{6.55in}
+\hrule\vspace{5pt}
+\textbf{Algorithm 2.} Threshold-selective weight decay
+\par\vspace{5pt}\hrule\vspace{8pt}
+\begin{algorithmic}[1]
+\Statex \textbf{Input:} $W_t,D_t\in\mathbb R^{m\times n}$; integer $p\ge0$; threshold $\tau>0$;
+\Statex \hspace{1.1em}$b=+1$ for the top band, $b=-1$ for the bottom band;
+\Statex \hspace{1.1em}polar/sign iterations $T,K$; stabilizer $\varepsilon$; fixed $\alpha,\lambda_{\tau,p}$; schedule $\eta_t$.
+\Statex
+\State $Q\gets W_t$
+\If{$p\bmod2=0$}
+    \State $Q\gets\operatorname{polar}(W_t;T,\varepsilon)$ \Comment{$Q\approx UV^{\top}$; Polar Express [1]}
+\EndIf
+\State $G\gets W_t^{\top}W_t$ if $m\ge n$, otherwise $G\gets W_tW_t^{\top}$
+\State $H\gets\operatorname{pow}(G,p\mathbin{//}2)$
+\State $S\gets QH$ if $m\ge n$, otherwise $S\gets HQ$
+\State $J\gets\operatorname{msign}(G-\tau^2 I;K,\varepsilon)$ \Comment{signed Newton--Schulz [2]}
+\State $P\gets(I+bJ)/2$
+\State $R\gets SP$ if $m\ge n$, otherwise $R\gets PS$
+\State \Return $W_t-\eta_t[\alpha D_t+\lambda_{\tau,p}R]$
+\end{algorithmic}
+\vspace{6pt}
+\small
+$A=G-\tau^2I$. $\operatorname{msign}$ uses $K$ signed Newton--Schulz iterations on
+$A/(\lVert A\rVert_F+\varepsilon)$; $I$ has the same size as $G$.
+The sign selects $\sigma_i>\tau$ (top) or $\sigma_i<\tau$ (bottom);
+finite iterations give a soft projector, and equality needs a tie convention.
+\par\vspace{5pt}
+[1] Amsel et al. (2025). \textit{The Polar Express}. arXiv:2505.16932.
+\par
+[2] Goyal \& Ramkumar (2026). \textit{Spectrally Targeted Muon}. arXiv:2610.10965.
+\par\vspace{8pt}\hrule
+\end{minipage}
+\end{document}

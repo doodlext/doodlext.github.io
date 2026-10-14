@@ -207,8 +207,33 @@ export default function rehypeReferencesAndFootnotes() {
       return m ? `https://doi.org/${m[1]}` : href;
     };
 
-    const DOI_BARE = /\b10\.[0-9]{4,9}\/[\-._;()\/:A-Z0-9]+\b/gi;
-    const URL_GEN = /\bhttps?:\/\/[^\s<>()"']+/gi;
+    const DOI_BARE = /\b10\.[0-9]{4,9}\/[\-._;()\/:A-Z0-9]+/gi;
+    const URL_GEN = /\bhttps?:\/\/[^\s<>"']+/gi;
+
+    // Parentheses can belong to DOI suffixes and ordinary URLs. Keep balanced
+    // pairs, but leave prose punctuation and an enclosing closing bracket out.
+    const trimLinkPunctuation = (raw) => {
+      let value = raw;
+      const openingFor = { ')': '(', ']': '[', '}': '{' };
+      while (value) {
+        const last = value.at(-1);
+        if (/[.,;:!]/.test(last)) {
+          value = value.slice(0, -1);
+          continue;
+        }
+        const opening = openingFor[last];
+        if (opening) {
+          const opens = [...value].filter((c) => c === opening).length;
+          const closes = [...value].filter((c) => c === last).length;
+          if (closes > opens) {
+            value = value.slice(0, -1);
+            continue;
+          }
+        }
+        break;
+      }
+      return value;
+    };
 
     const linkifyTextNode = (textNode) => {
       const text = String(textNode.value || '');
@@ -221,14 +246,16 @@ export default function rehypeReferencesAndFootnotes() {
       let m;
       URL_GEN.lastIndex = 0;
       while ((m = URL_GEN.exec(text)) !== null) {
-        matches.push({ type: 'url', start: m.index, end: URL_GEN.lastIndex, raw: m[0] });
+        const raw = trimLinkPunctuation(m[0]);
+        matches.push({ type: 'url', start: m.index, end: m.index + raw.length, raw });
       }
       // Collect DOI matches
       DOI_BARE.lastIndex = 0;
       while ((m = DOI_BARE.exec(text)) !== null) {
-        matches.push({ type: 'doi', start: m.index, end: DOI_BARE.lastIndex, raw: m[0] });
+        const raw = trimLinkPunctuation(m[0]);
+        matches.push({ type: 'doi', start: m.index, end: m.index + raw.length, raw });
       }
-      matches.sort((a, b) => a.start - b.start);
+      matches.sort((a, b) => a.start - b.start || b.end - a.end);
 
       for (const match of matches) {
         if (match.start < last) continue; // overlapping
@@ -490,5 +517,3 @@ export default function rehypeReferencesAndFootnotes() {
     appendBackrefsBlock(footOl, footIdToBacklinks, 'Back to footnote call');
   };
 }
-
-

@@ -49,3 +49,24 @@
 .article-algorithm__body .katex-display {
   margin: var(--spacing-3) 0;
 }
+
+/* Long inline formulas scroll inside an algorithm rather than widen the page. */
+.article-algorithm__body .katex {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: middle;
+}
+
+.article-algorithm__body .katex-display .katex {
+  display: block;
+  max-width: none;
+  overflow: visible;
+}
+
+@media (max-width: 30rem) {
+  .content-grid > main .article-algorithm {
+    padding: var(--spacing-3);
+  }
+}

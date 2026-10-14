@@ -1,0 +1,663 @@
+---
+title: "Rethinking Weight Decay\nFrom Scalar Shrinkage to Spectral Dynamics"
+subtitle: "Weight decay controls more than scale. What changes when its direction becomes a spectral design choice?"
+description: "From ordinary weight decay and optimizer evolution to spectral-power decay: exact linear theory, Transformer spectra, and controlled experiments that separate geometric change from training gains."
+published: "2026-10-11"
+modified: "2026-10-14"
+template: "article"
+category: "Research notes"
+citationKey: "tang2026_rethinking_weight_decay"
+authors:
+  - name: "Xuan Tang"
+    url: "/"
+    affiliations: [1]
+  - name: "Difan Zou"
+    url: "https://difanzou.github.io/"
+    affiliations: [1]
+affiliations:
+  - name: "The University of Hong Kong"
+    url: "https://www.hku.hk/"
+tags:
+  - optimization
+  - weight decay
+  - spectral dynamics
+  - Muon
+  - transformers
+tableOfContentsAutoCollapse: true
+showPdf: false
+language: en
+translationUrl: /blog/rethinking-weight-decay-zh/
+translationLabel: 中文
+---
+
+import Note from "../../components/Note.astro";
+
+## Weight decay has a direction, too
+
+When tuning weight decay, we usually start with a coefficient: how large should it be, should it change over training, and should different modules use different values? These questions ask **how much to decay**. A less common question is **which direction decay should follow**.
+
+AdamW makes that choice visible by separating task updates from weight shrinkage. The optimizer uses gradients to learn; the decay branch imposes a preference on the current weights. Ordinary WD points along $W$. For a matrix weight, its singular-value structure offers more choices.
+
+An isolated ordinary-WD step reduces the Frobenius norm while preserving all relative singular-value ratios. It directly changes scale, without redistributing spectral mass.
+
+**Spectral-power weight decay**, written as $\mathcal{S}_p$ WD, replaces scalar shrinkage with a singular-value power. For a weight matrix $W\in\mathbb R^{m\times n}$ with rank-$r$ SVD $W=U\operatorname{diag}(\sigma_1,\ldots,\sigma_r)V^\top$, where $U,V$ contain orthonormal singular vectors and the $\sigma_i>0$ are its active singular values, define
+
+$$
+S_p(W)=U\operatorname{diag}(\sigma_1^p,\ldots,\sigma_r^p)V^\top.
+$$
+
+Here $p\ge0$ controls how shrinkage depends on mode size, $S_p(W)$ denotes the direction, and $\mathcal{S}_p$ WD names the regularization method. Its associated Schatten-$(p+1)$ penalty is
+
+$$
+R_p(W)=\frac{1}{p+1}\sum_{i=1}^{r}\sigma_i^{p+1}
+=\frac{1}{p+1}\lVert W\rVert_{S_{p+1}}^{p+1}.
+$$
+
+The Schatten norm is $\lVert W\rVert_{S_q}=(\sum_i\sigma_i^q)^{1/q}$. For $p>0$, $S_p=\nabla R_p$; at $p=0$, it is a nuclear-norm subgradient [@lewis1995spectral; @watson1992subdifferential]. Ordinary WD is the $p=1$ case. Varying $p$ changes the preference for shrinking the head or tail of the spectrum.
+
+With this spectral preference in place, the next question is how changes in the weights affect the representations they produce—and whether that helps the task. We will examine weight spectra, activation spectra, and validation loss together, so it helps to first clarify what each can tell us.
+
+<Note variant="neutral" title="Three levels to distinguish" emoji="↗">
+
+The **weight spectrum** describes the distribution of parameter modes, providing a starting point for observing regularization geometry. The **activation spectrum** describes the representation those weights produce on an input. **Validation loss** tells us whether the resulting changes help the task.
+
+These quantities are related, but none substitutes for the others. $\mathcal{S}_p$ WD is a regularizer: it imposes a weight-based spectral preference, rather than choosing a descent direction from the current task gradient. Its value has to be assessed during training, not inferred from a rank statistic alone.
+
+</Note>
+
+## 1. From ordinary weight decay to decoupled optimizers
+
+### 1.1 L2 regularization becomes weight decay in plain SGD
+
+Ridge regression and Tikhonov regularization add a quadratic penalty to control parameter size [@hoerl1970ridge; @tikhonov1977solutions]:
+
+$$
+\min_W L(W)+\frac{\beta}{2}\lVert W\rVert_F^2.
+$$
+
+Here $L$ is the task loss, $\beta\ge0$ the L2 penalty coefficient, $\alpha>0$ the base step size, and $\eta_t\ge0$ a time-dependent schedule multiplier. Plain SGD gives
+
+$$
+W_{t+1}=W_t-\eta_t\alpha\nabla L(W_t)-\eta_t\alpha\beta W_t
+=W_t-\eta_t[\alpha\nabla L(W_t)+\lambda W_t],
+\qquad \lambda=\alpha\beta.
+$$
+
+With matched coefficients, L2 regularization and weight decay coincide in plain SGD. The Frobenius norm measures total matrix energy; in singular values,
+
+$$
+\lVert W\rVert_F^2=\sum_i\sigma_i^2.
+$$
+
+Early weight-decay analysis already studied how this scale control can suppress irrelevant components and target noise [@krogh1991weightdecay].
+
+### 1.2 Momentum and adaptive gradients change the optimization path
+
+Momentum averages gradients over time [@sutskever2013momentum], while AdaGrad and Adam add coordinate-wise preconditioning [@duchi2011adagrad; @kingma2015adam]. Let $w_t$ be vectorized parameters, $g_t$ a stochastic task gradient, and $P_t$ a preconditioning operator determined by gradient history. In Adam, its diagonal scaling uses the inverse square root of the second-moment estimate with a numerical stabilizer. Suppressing momentum averaging, the placement of a coupled L2 term can be illustrated as
+
+$$
+w_{t+1}=w_t-\eta_t\alpha P_t(g_t+\beta w_t).
+$$
+
+An independent decay term instead acts directly on the parameters:
+
+$$
+w_{t+1}=w_t-\eta_t\alpha P_tg_t-\eta_t\lambda w_t.
+$$
+
+Plain SGD has $P_t=I$, so $\lambda=\alpha\beta$ gives the same update. In Adam, the L2 term enters preconditioning and state estimation, making it generally different from AdamW's independent decay. This distinction also matters for generalization [@zou2023adamregularization; @tang2025understanding].
+
+### 1.3 AdamW exposes a separate decay branch
+
+AdamW makes the placement distinction explicit [@loshchilov2019adamw]. We write the independent-WD interface as
+
+$$
+W_{t+1}=W_t-\eta_t\left[
+\underbrace{\alpha D_t}_{\text{task update}}
++\underbrace{\lambda W_t}_{\text{independent weight decay}}
+\right].
+$$
+
+Here $D_t$ is the matrix direction produced from the task gradient and optimizer state. The base coefficients $\alpha,\lambda$ are fixed, while $\eta_t$ carries the time-dependent schedule. Decay acts directly on the parameters, outside preconditioning and state estimation. This placement is what “decoupled” means; both branches can still share a schedule.
+
+Several lines of research make decay strength more flexible. AdaDecay assigns parameter-wise rates from gradient statistics [@nakamura2019adaptive]; adaptive WD adjusts coefficients using the relative strengths of task and L2 updates to improve robustness [@ghiasi2023robustness]; AlphaDecay allocates decay across LLM modules for heavy-tailed balancing [@he2025alphadecay].
+
+These methods refine how much decay to apply and where. Parameter-wise coefficients also change relative shrinkage, so strength and geometry are not entirely separate. Here we ask a further question: can we specify shrinkage directly in the weight matrix's singular basis?
+
+### 1.4 Matrix-aware optimizers make geometry explicit
+
+K-FAC, Shampoo, SOAP, and Muon each change the geometry of the task update in a different way [@martens2015kfac; @gupta2018shampoo; @vyas2024soap; @jordan2024muon]. Muon is especially direct: its idealized matrix update keeps the singular directions of a momentum-shaped matrix and replaces its active singular values by one [@jordan2024muon]. Polar Express provides an efficient approximation to that operation [@amsel2025polarexpress].
+
+Task optimizers already make extensive use of matrix structure; the decay branch deserves the same attention. The two branches act on different objects, though: Muon transforms task momentum, while $\mathcal{S}_p$ WD acts on the current weights. Similar matrix operations can therefore serve different purposes.
+
+## 2. What ordinary weight decay controls
+
+### 2.1 Isolated contraction changes scale, not normalized shape
+
+First isolate the decay step. For nonzero $W=U\Sigma V^\top$, with $\Sigma=\operatorname{diag}(\sigma_i)$, let $\eta$ be the current schedule multiplier. When $0\le a<1$, ordinary WD gives
+
+$$
+W^+=(1-a)W,
+\qquad a=\eta\lambda,
+$$
+
+and therefore
+
+$$
+\sigma_i^+=(1-a)\sigma_i,
+\qquad
+\frac{\sigma_i^+}{\sigma_1^+}=\frac{\sigma_i}{\sigma_1}.
+$$
+
+The spectral and Frobenius norms shrink together, while the normalized spectrum, stable rank, and eRank stay unchanged. This is the direct geometry of ordinary WD. During training, task updates change singular values and directions, and the decay coefficient can influence the final spectrum through the training trajectory [@loshchilov2019adamw].
+
+### 2.2 Frobenius control is useful, but it is not spectral-shape control
+
+This distinction helps explain why ordinary WD can still be associated with low-rank structure. Its interaction with optimization has several mechanisms [@zhang2019mechanisms]; in factorized attention, the model also depends on products of weights. Write the query and key weights as $W_Q,W_K$ and their product as $P=W_Q^\top W_K$. When the factor dimensions can represent $P$, the classical identity is [@srebro2004mmmf]
+
+$$
+\lVert P\rVert_*=
+\min_{AB^\top=P}\frac{\lVert A\rVert_F^2+\lVert B\rVert_F^2}{2}.
+$$
+
+Here $\lVert P\rVert_*=\sum_i\sigma_i(P)$ is the nuclear norm, and $A,B$ range over compatible factors. The minimum links quadratic penalties on factors to a low-rank preference for their product; it does not require arbitrary training-time factors to attain that minimum. Related low-rank attention analysis also relies on specific balance and dynamics conditions [@kobayashi2024lowrankattention].
+
+Norm control has another route into training: the effective step size. In scale-invariant parameterizations, weight norm affects how much a given update changes the represented function [@vanlaarhoven2017l2]. Hyperball controls the Frobenius norms of both weights and optimizer updates directly [@wen2026hyperball]. For a small task step, the angular displacement is approximately
+
+$$
+\Delta\theta_t\approx\frac{\eta_t\alpha\lVert D_{t,\perp}\rVert_F}{\lVert W_t\rVert_F},
+\qquad D_{t,\perp}=D_t-
+\frac{\langle D_t,W_t\rangle_F}{\lVert W_t\rVert_F^2}W_t.
+$$
+
+Here $D_{t,\perp}$ is the component tangent to the weight sphere, and $\langle A,B\rangle_F=\operatorname{tr}(A^\top B)$. With a norm-controlled task direction, $\eta_t\alpha/\lVert W_t\rVert_F$ is an effective learning-rate (ELR) proxy.
+
+### 2.3 Notation and rank metrics used throughout
+
+For nonzero $W\in\mathbb R^{m\times n}$, order the singular values as $\sigma_1\ge\cdots\ge\sigma_R\ge0$, where $R=\min(m,n)$ includes any zero modes. Set $r_i=\sigma_i/\sigma_1$ and $H(q)=-\sum_iq_i\log q_i$ for a probability vector $q$, using $0\log0=0$. The spectral norm is $\lVert W\rVert_2=\sigma_1$, and $k$ denotes the number of leading modes retained in a top-$k$ statistic.
+
+| Metric | Definition | Interpretation |
+|---|---|---|
+| Algebraic rank [@higham2002accuracy] | Number of nonzero $\sigma_i$ | Exact dimension of the active subspace |
+| Stable rank [@sanyal2020stablerank] | $\lVert W\rVert_F^2/\lVert W\rVert_2^2=\sum_i r_i^2$ | Total squared energy relative to the largest mode |
+| Entropy effective rank, or eRank [@roy2007effectiverank] | $\exp H(q)$, $q_i=\sigma_i/\sum_j\sigma_j$ | Effective number of modes carrying singular-value mass |
+| Output-energy effective rank [@roy2007effectiverank] | $\exp H(q^{(2)})$, $q_i^{(2)}=\sigma_i^2/\sum_j\sigma_j^2$ | Effective number of energy-bearing output modes under isotropic input |
+| Top-$k$ energy [@eckart1936approximation] | $\sum_{i\le k}\sigma_i^2/\sum_j\sigma_j^2$ | Concentration of energy in the leading modes |
+| Normalized spectral entropy [@shannon1948communication] | $H(q)/\log R$ | Entropy relative to a uniform spectrum |
+
+Stable rank and eRank are invariant to overall scale but emphasize different parts of the spectrum, so they need not move together. Output-energy effective rank weights modes by squared singular values; attention entropy describes the post-softmax attention distribution, a different object [@roy2007effectiverank; @vaswani2017attention; @zhai2023entropy]. Below, “rank” refers to the labeled effective-rank statistic unless algebraic rank is explicitly stated.
+
+## 3. Spectral-power weight decay: direction, theory, and spectrum shaping
+
+### 3.1 Definition and associated penalty
+
+Ordinary WD gives every singular value the same relative shrinkage. Changing the singular-value exponent is a direct way to change that preference:
+
+$$
+S_p(W)=U\Sigma^pV^\top,
+\qquad
+\Sigma^p=\operatorname{diag}(\sigma_i^p),
+\qquad W=U\Sigma V^\top.
+$$
+
+The basic cases are
+
+$$
+S_0(W)=UV^\top,
+\qquad S_1(W)=W,
+\qquad S_2(W)=U\Sigma^2V^\top.
+$$
+
+The $p=1$ case recovers ordinary WD. At $p=0$, the active polar direction gives each nonzero mode the same absolute shrinkage; at $p=2$, larger modes receive stronger absolute and relative shrinkage. We set the $S_0$ contribution of zero modes to zero, consistent with the active polar factor and nuclear-norm subdifferential [@higham1986polar; @watson1992subdifferential; @cai2010svt].
+
+For $p>0$, $S_p$ is the gradient of the unitarily invariant spectral penalty
+
+$$
+R_p(W)=\frac{1}{p+1}\sum_i\sigma_i^{p+1}
+=\frac{1}{p+1}\lVert W\rVert_{S_{p+1}}^{p+1}.
+$$
+
+The direction has exponent $p$; the penalty has order $p+1$ [@lewis1995spectral]. At $p=0$, $R_0$ is the nonsmooth nuclear norm and $S_0$ is one valid subgradient [@cai2010svt; @watson1992subdifferential] to encourage low-rank structure [@andriianov2026spectralwd].
+
+The independent update used below is
+
+$$
+W_{t+1}=W_t-\eta_t\left[
+\alpha D_t+\lambda_pS_p(W_t)
+\right],
+$$
+
+This uses the same fixed base coefficients and schedule convention as before. Changing $p$ changes both the direction's norm and its allocation across modes, so equal $\lambda_p$ values do not imply equal decay strength.
+
+### 3.2 Computing $\mathcal{S}_p$ WD
+
+Let $W\in\mathbb R^{m\times n}$, where $m$ is the output dimension and $n$ the input dimension. The efficient implementation below applies to integer $p\ge0$. Choose the smaller Gram matrix and let $Q_W=UV^\top$ be the active polar factor. For nonnegative integers $k$,
+
+$$
+\begin{array}{c|c|c|c}
+\text{shape} & G\text{ and its size} & S_{2k}(W) & S_{2k+1}(W)\\ \hline
+m\ge n & W^\top W\in\mathbb R^{n\times n} & Q_WG^k & WG^k\\
+m<n & WW^\top\in\mathbb R^{m\times m} & G^kQ_W & G^kW
+\end{array}
+$$
+
+Here $Q_W$ can be efficiently approximated with Polar Express [@amsel2025polarexpress].
+
+![Algorithm 1. Spectral-power weight decay using the Gram and the polar function.](/blog/rethinking-weight-decay/algorithms/spwd.png)
+
+*Algorithm 1. Spectral-power weight decay using the Gram and the polar function.* The polar function uses Polar Express [@amsel2025polarexpress].
+
+The computation uses smaller-Gram products plus polar iterations for even $p$. Repeated squaring reuses intermediate powers, for example $G^4=(G^2)^2$; no Gram is needed for $p=0,1$. Actual cost still depends on matrix size, exponent, and iteration count. The following check examines PE8 accuracy.
+
+<details>
+<summary>PE8 versus SVD: a small-matrix implementation check</summary>
+
+We checked FP32 PE8 on full-rank $64\times64$, $128\times64$, and $64\times128$ matrices, with seeds 42–44 and log-spaced singular values. The condition number is $\kappa_{\mathrm{cond}}=\sigma_1/\sigma_R$. Eight quintic coefficient sets are generated from the Polar Express construction with design lower bound $\ell=10^{-3}$ and safety scaling 1.01. The reference is an FP64 SVD of the same FP32 input; the table reports the maximum relative Frobenius error $\lVert\widehat S_p-S_p^{\mathrm{SVD}}\rVert_F/\lVert S_p^{\mathrm{SVD}}\rVert_F$ over the nine shape/seed combinations.
+
+| $\kappa_{\mathrm{cond}}$ | $p=0$ | $p=2$ | $p=4$ |
+|---:|---:|---:|---:|
+| $10$ | $2.81\times10^{-6}$ | $2.85\times10^{-6}$ | $2.87\times10^{-6}$ |
+| $10^3$ | $6.66\times10^{-5}$ | $3.02\times10^{-6}$ | $2.96\times10^{-6}$ |
+| $10^6$ | $0.549$ | $2.68\times10^{-6}$ | $2.67\times10^{-6}$ |
+
+For $p=1$, the algorithm returns $W$ exactly. The ill-conditioned $10^6$ case places many normalized modes below the polynomial schedule's design interval: eight iterations do not resolve them in the equally weighted polar direction $p=0$. Their contribution to $p=2,4$ is suppressed by $\sigma_i^p$, giving small relative errors for those directions.
+
+</details>
+
+### 3.3 Pure decay and coefficient-dependent shape
+
+**First isolate what decay does.** If the applied task branch satisfies $\alpha\lVert D_t\rVert_F\ll\lambda_p\lVert S_p(W_t)\rVert_F$ late in training, pure decay can also serve as a local approximation. Since both branches share $\eta_t$, a falling learning rate alone does not establish this regime. Let continuous time $t$ represent cumulative schedule time $\sum_j\eta_j$, with $\lambda=\lambda_p$. Decay preserves singular directions, giving
+
+$$
+\dot\sigma_i=-\lambda\sigma_i^p.
+$$
+
+For an initially positive mode,
+
+$$
+\sigma_i(t)=
+\begin{cases}
+[\sigma_i(0)-\lambda t]_+, & p=0,\\
+\sigma_i(0)e^{-\lambda t}, & p=1,\\
+\left[\sigma_i(0)^{1-p}+(p-1)\lambda t\right]^{-1/(p-1)}, & p>1.
+\end{cases}
+$$
+
+The relative rate is
+
+$$
+-\frac{\dot\sigma_i}{\sigma_i}=\lambda\sigma_i^{p-1}.
+$$
+
+At $p=1$, every mode loses the same fraction. For $p>1$, larger modes shrink faster in relative terms, flattening the normalized spectrum. For $0\le p<1$, smaller active modes shrink faster in relative terms and can reach zero in finite continuous time.
+
+The distinction between continuous flow and a finite implementation matters here. The $p=0$ positive-part solution also has the form of nuclear-norm proximal soft-thresholding [@cai2010svt; @parikh2014proximal]. An explicit polar step that crosses zero instead gives $|\sigma_i-\eta\lambda|$, not automatic clipping. We therefore describe $p=0$ as a preference for suppressing the spectral tail.
+
+While $W\ne0$,
+
+$$
+\frac{\mathrm d}{\mathrm dt}\log\lVert W\rVert_F
+=-\lambda\frac{\sum_i\sigma_i^{p+1}}{\sum_i\sigma_i^2}.
+$$
+
+Only $p=1$ has a relative Frobenius contraction rate independent of the current spectrum.
+
+![Analytic pure-decay spectral trajectories](/blog/rethinking-weight-decay/figures/asymmetric_case_study/pure_decay_shape.png)
+
+*Figure 1. Pure-decay trajectories at different cumulative decay exposures. Ordinary WD preserves the normalized spectrum; the thresholded $p=0$ flow removes small modes first, while $p=2$ flattens the relative spectrum. These curves describe a decay-dominated local mechanism.*
+
+**Coefficient as a shape parameter.** Let $\eta$ denote one step's schedule multiplier, $r_i=\sigma_i/\sigma_1$, and $\kappa=\eta\lambda\sigma_1^{p-1}$ its relative spectral-head step. As long as the step preserves signs and ordering,
+
+$$
+r_i^+=\frac{r_i-\kappa r_i^p}{1-\kappa},
+\qquad
+\frac{\partial r_i^+}{\partial\kappa}
+=\frac{r_i-r_i^p}{(1-\kappa)^2}.
+$$
+
+For $0<r_i<1$, the derivative is zero at $p=1$, positive for $p>1$, and negative for $0\le p<1$. The exponent sets the shaping tendency; the coefficient controls how far a step follows it. Only ordinary WD preserves normalized shape regardless of isolated decay strength.
+
+### 3.4 A linear toy model: from weight spectra to output spectra
+
+Adding a solvable task lets us ask what happens when the spectral preference meets a fitting objective. Consider a dense teacher $A=U_A\operatorname{diag}(a_i)V_A^\top$, where $a_i$ are its singular values and $U_A,V_A$ its singular-vector matrices. Analyze
+
+$$
+\min_W\frac12\lVert W-A\rVert_F^2
++\frac{\lambda}{p+1}\sum_i\sigma_i(W)^{p+1}.
+$$
+
+In this subsection, $\lambda$ is the coefficient in the loss; for plain gradient descent it corresponds to $\lambda_p/\alpha$ in the earlier update. The trace inequality aligns the optimal $W$ with the singular vectors of $A$ [@lewis1995spectral]. Strong convexity of squared error and convexity of the spectral penalty give a unique optimal matrix. Writing its singular values as $s_i$ reduces the problem to scalar equations [@parikh2014proximal]:
+
+$$
+s_i+\lambda s_i^p=a_i\quad(p>0),
+\qquad s_i=(a_i-\lambda)_+\quad(p=0).
+$$
+
+For $p=1$, $s_i=a_i/(1+\lambda)$: every mode receives the same scaling. For $p=2$ and $\lambda>0$,
+
+$$
+s_i=\frac{\sqrt{1+4\lambda a_i}-1}{2\lambda},
+$$
+
+which compresses large teacher modes relatively more. At $p=4$, there is again a unique nonnegative root; $p=0$ recovers singular-value soft-thresholding [@cai2010svt]. The same fitting task can therefore yield different spectra under different regularization preferences.
+
+We check these solutions using plain gradient descent, with a proximal step at $p=0$, then use whitened inputs to examine how the weight spectrum transfers to the output.
+
+**Deterministic finite-sample check.** The synthetic experiment constructs $N=512$ paired positive/negative samples in dimension $d=6$. Reduced QR produces a centered design $X\in\mathbb R^{N\times d}$ with
+
+$$
+\frac{X^\top X}{N}=I
+$$
+
+up to a maximum absolute error of $6.66\times10^{-16}$; the largest absolute coordinate mean is $1.87\times10^{-17}$. The teacher is non-diagonal, with singular values $(4,2,1,0.4,0.15,0.05)$, and we set $\lambda=0.2$. The input construction uses standard whitening [@kessy2018whitening].
+
+Let $\hat\sigma_i$ denote the numerically optimized singular values and $s_i^\star$ the analytic optimum. The matrix solution agrees with the scalar solution:
+
+| $p$ | Analytic singular values | $\max_i\lvert\hat\sigma_i-s_i^\star\rvert$ | Covariance–SVD identity error |
+|---:|---|---:|---:|
+| 0 | $(3.8,1.8,0.8,0.2,0,0)$ | $5.29\times10^{-8}$ | $3.6\times10^{-15}$ |
+| 1 | $(3.3333,1.6667,0.8333,0.3333,0.125,0.0417)$ | $1.22\times10^{-9}$ | $3.6\times10^{-15}$ |
+| 2 | $(2.6235,1.5311,0.8541,0.3723,0.1458,0.0495)$ | $7.22\times10^{-10}$ | $3.6\times10^{-15}$ |
+| 4 | $(1.8175,1.3452,0.8800,0.3951,0.1499,0.0500)$ | $2.36\times10^{-9}$ | $3.6\times10^{-15}$ |
+
+The covariance check is a separate identity. For the centered output matrix $Y=XW^\top$,
+
+$$
+\frac{Y^\top Y}{N}
+=W\frac{X^\top X}{N}W^\top
+=WW^\top.
+$$
+
+The nonzero output-covariance eigenvalues are the squared singular values of the same $W$. The table's final column checks this identity; the preceding column checks agreement between the optimized and analytic solutions.
+
+Across these solutions from $p=0$ to $p=4$, output-energy effective rank rises from $1.869$ to $2.923$, while activation eRank rises from $2.812$ to $4.100$. Both describe a more spread-out spectrum, but use squared singular values and singular values as weights, respectively.
+
+![Linear teacher: analytic and optimized spectra](/blog/rethinking-weight-decay/figures/linear_spectral_synthetic/linear_teacher_spectrum.png)
+
+*Figure 2. The dense linear teacher experiment: analytic mode-wise solutions and optimized matrix spectra. Exact finite-sample whitening also makes the output covariance–SVD identity checkable to numerical precision.*
+
+### 3.5 Eight-layer Transformer: does spectrum shaping survive training?
+
+We first fix the decay coefficient and compare $p\in\{0,1,2,4\}$ in an 8-layer, width-512 SwiGLU Transformer, then hold each power fixed and sweep its coefficient.
+
+**Vary the power: how much relative mass remains beyond the spectral head?**
+
+![Eight-layer normalized weight spectra](/blog/rethinking-weight-decay/figures/normalized_spectra.png)
+
+*Figure 3. Median normalized spectra across layers, with 25–75% layer bands. The horizontal axis is normalized singular-value index; the vertical axis is $\sigma_i/\sigma_1$. Bands describe variation across layers.*
+
+Higher $p$ leaves more relative mass outside the largest mode, especially in MLP expansion and projection matrices. Q and K respond less strongly. The pure-decay intuition remains visible, but different matrix families respond with different magnitudes.
+
+![Absolute and normalized spectral distributions](/blog/rethinking-weight-decay/figures/spectral_distributions.png)
+
+*Figure 4. Spectral probability-mass distributions for the eight-layer MLP expansion matrices. Left: absolute $\log_{10}\sigma_i$. Right: each matrix normalized by its own largest singular value. Every matrix contributes equal mass.*
+
+Absolute and normalized spectra show two sides of the same change. Singular values can shrink overall while the normalized bulk moves toward one. Reducing spectral-head dominance does not require the other singular values to grow in absolute size. Each matrix contributes equal probability mass, with smoothing used only for display.
+
+At the fixed-coefficient endpoint $\lambda=0.01$, the summary is:
+
+| $p$ | MLP stable rank | QK stable rank | Normalized attention entropy |
+|---:|---:|---:|---:|
+| 0 | 171.0 | 24.29 | 0.5771 |
+| 1 | 173.8 | 24.51 | 0.5758 |
+| 2 | 183.5 | 25.03 | 0.5823 |
+| 4 | 226.6 | 26.72 | 0.5982 |
+
+MLP stable rank shows the strongest response, and QK stable rank also rises. Attention entropy, however, does not increase with every increment in $p$. These statistics describe different computational objects; a change in one does not directly determine another.
+
+**Vary the coefficient: what happens further along the same spectral preference?** Analytic pure decay from a shared checkpoint spectrum provides a clear reference:
+
+![Pure-decay coefficient response](/blog/rethinking-weight-decay/coefficient_sweep/coefficient_pure_decay.png)
+
+*Figure 5. Analytic pure decay from a shared checkpoint spectrum. At $p=1$, changing the coefficient translates the absolute log-spectrum without changing normalized shape; other powers also change shape.*
+
+At $p=1$, the coefficient controls overall scale. At $p\ne1$, it also changes the relative allocation between head and tail. Returning to full training, increasing the coefficient from $0.003$ to $0.03$ gives these endpoint changes in MLP expansion matrices:
+
+| $p$ | Normalized log-spectrum distance $D_{\mathrm{shape}}$ | Mean stable-rank change |
+|---:|---:|---:|
+| 0 | 0.01955 | −5.6% |
+| 1 | 0.00220 | −0.6% |
+| 2 | 0.03131 | +11.4% |
+| 4 | 0.06536 | +25.0% |
+
+<details>
+<summary>How the spectral distance is computed</summary>
+
+Let $r_{\ell i}^{(\lambda)}$ be the $i$th singular value of layer $\ell$'s MLP expansion matrix divided by that matrix's largest singular value. With eight layers and 512 modes per layer,
+
+$$
+D_{\mathrm{shape}}=\frac{1}{8\cdot512}
+\sum_{\ell=0}^{7}\sum_{i=1}^{512}
+\left|\log_{10}r_{\ell i}^{(0.03)}-\log_{10}r_{\ell i}^{(0.003)}\right|.
+$$
+
+This is the layer-average first Wasserstein distance between equal-weight log-spectrum distributions. It is independent of histogram bins and display smoothing. The distance measures the size of the shape change; stable rank and spectral curves help identify its direction.
+
+</details>
+
+![Coefficient response after full training](/blog/rethinking-weight-decay/coefficient_sweep/coefficient_trained.png)
+
+*Figure 6. MLP expansion spectra after full training. Across the tested coefficients, $p=1$ normalized spectra nearly overlap, while other powers produce a stronger shape response.*
+
+For these MLP expansion endpoints, ordinary-WD normalized spectra nearly overlap, while $p=2,4$ have a much stronger coefficient response. That near-invariance is specific to this matrix family's normalized spectra and the tested coefficient range: in the same ordinary-WD sweep, mean Q and K stable ranks fall by about 7.7% and 14.4%. Combined task-and-decay dynamics can still produce a different response from isolated decay.
+
+![Endpoint geometry across decay coefficients](/blog/rethinking-weight-decay/coefficient_sweep/coefficient_metrics.png)
+
+*Figure 7. Endpoint norms, rank measures, QK-product rank, and normalized attention entropy under the coefficient sweep.*
+
+For example, at $p=4$, raising the coefficient from $0.003$ to $0.03$ increases mean MLP stable rank from about $200.7$ to $250.9$ while reducing spectral norm from about $2.54$ to $1.75$. The spectral head becomes smaller, and total energy relative to it increases.
+
+The spectral preference is now a measurable training effect: powers and coefficients jointly change weight scale and shape, with responses that depend on matrix family. What can that control offer within a concrete training recipe?
+
+## 4. Case study: Head-wise Muon and V spectral regularization
+
+### 4.1 From HHH to HHF: changing the V update
+
+Public reports for GLM-5, Kimi K3, and Qwen3.8-Next use head-wise Muon on query, key, and value weights [@glm2026glm5; @k3_2026; @qwen2026qwen38]; DeepSeek-V4.1-Flash instead uses head-wise updates only for query and key [@deepseek2026v41].
+
+Let **H** denote head-wise updates and **F** full-matrix updates, in Q/K/V order. HHH splits all three projections by head; HHF changes only V to a full matrix spanning heads. Muon orthogonalizes task momentum, so changing the grouping changes how task information enters V. It does not directly require orthogonal weights or activations.
+
+Here $\mathcal{S}_p$ WD supplies a weight-spectrum preference that can be adjusted separately. We first compare HHH with HHF, then hold the HHF update rule fixed and add a spectral term to examine how the two geometric choices interact.
+
+### 4.2 Hold the HHF update rule fixed; change V's shrinkage preference
+
+Add a $p=2$ spectral term on the full V weight while retaining ordinary weight decay:
+
+$$
+W_{V,t+1}=W_{V,t}-\eta_t\left[
+\alpha D_{V,t}+\lambda_1W_{V,t}
++\lambda_2S_2(W_{V,t})
+\right],
+\qquad \lambda_1=0.1\alpha,\quad \lambda_2=\alpha\lambda_V.
+$$
+
+The values $0.1$ and $\lambda_V$ retain LR-coupled convention, multiplying the current learning rate $\eta_t\alpha$; this gives $\lambda_1,\lambda_2$ in our notation. The ideal decay direction is the gradient of $\lambda_1\lVert W_V\rVert_F^2/2+\lambda_2\sum_i\sigma_i(W_V)^3/3$. Isolating decay and taking a step that does not cross zero, mode $i$ has relative shrinkage
+
+$$
+\frac{\Delta\sigma_i}{\sigma_i}\bigg|_{\mathrm{decay}}
+=-\eta_t\left(\lambda_1+\lambda_2\sigma_i\right).
+$$
+
+Ordinary WD gives every mode the same relative shrinkage; the additional $p=2$ term puts more pressure on larger modes. This introduces an explicit spectral preference while retaining the Muon update rule.
+
+The spectral term is computed from the pre-update weight as $(WW^\top)\operatorname{polar}(W)$ [@amsel2025polarexpress]. Ordinary WD remains in place and the spectral term is added. HHH → HHF → HHF + $\mathcal{S}_p$ denotes a comparison of recipes.
+
+<details>
+<summary>Training protocol and coefficient sweeps</summary>
+
+The HHH, HHF, and selected $p=2$ trajectories share implementation, initialization, and ordered data. The model has 12 layers, width 768, and head dimension 128; sequence length is 4096, global batch is 524,288 tokens, and seed is 42. Training lasts 16,204 steps, or 8,495,562,752 tokens, with 256 warmup steps followed by cosine decay to 0.1 of peak LR. Ordinary WD is 0.1. Validation uses 10,485,760 tokens at 164 evaluations. Muon scale is $0.2\sqrt{\max(d_{\mathrm{in}},d_{\mathrm{out}})}$ [@liu2025muonscalable], with dimensions taken from the original full projection.
+
+The added HHF $p=2$ coefficient spans $\lambda_V=10^{-5}$ to $5\times10^{-4}$, with denser points around $7\times10^{-5}$. The $p=0$ control includes $0.005$ and a $0.004$–$0.010$ fine sweep. At $p=1$, total ordinary V WD becomes $0.1+\lambda_V$. Raw coefficients across powers are not matched decay strengths.
+
+</details>
+
+### 4.3 What improves, and what can rank tell us?
+
+Final validation NLL falls from $3.01968$ for HHH to $3.01596$ for HHF, then to $3.01324$ for selected HHF + $p=2$. The first comparison changes V task-update scope; the second adjusts regularization under the same update rule. The latter uses $\lambda_V=7\times10^{-5}$ and improves on HHF by about $0.00272$.
+
+The two HHF trajectories have very similar overall V weight RMS, and the added spectral step is much smaller than the task step. This is weak regularization acting throughout training: pure-decay analysis explains its preference, while the observed outcome comes from its sustained interaction with task updates.
+
+![Head-wise and full-matrix V update comparison](/blog/rethinking-weight-decay/figures/headwise_muon_latest/article-training-path.png)
+
+*Figure 8. Full training trajectories from a common initialization: HHH, HHF, and selected HHF + full-V $p=2$. The first comparison changes V task-update scope; the second holds the HHF update rule fixed and adds spectral regularization.*
+
+![Terminal V ranks, cross-head activation similarity, and validation loss](/blog/rethinking-weight-decay/figures/headwise_muon_latest/rank-vs-loss-extended.png)
+
+*Figure 9. Top row: V weight eRank, weight stable rank, and actual V activation eRank. Bottom row: fixed-input V eRank, actual activation head CKA, and fixed-input head CKA. Rank axes are not divided by dimension. The vertical axis is final validation NLL. Crosses and stars denote HHH and HHF; circles, squares, and diamonds denote the HHF $p=0,1,2$ sweeps; triangles are HHH + $p=2$ sweep. Thick outlines mark each family's best point; the dashed line is the HHF control loss.*
+
+**First compare the HHH and HHF groups.** Some HHH + $p=2$ points have higher weight eRank or stable rank than HHF, yet worse loss. Actual V activation eRank and cross-head similarity (CKA) separate the groups more clearly: HHH generally has lower activation eRank and higher CKA. Weight rank alone misses this representation difference, and raising it has not compensated for the different task-update rule. This echoes recent Muon analysis in which weight-spectrum shape and task performance do not always move together [@goyal2026spectrallytargetedmuon].
+
+**Now look within the HHF sweep.** The actual activation-eRank points form an almost vertical cloud: similar effective dimensions coexist with visibly different losses. Relative to HHF, the best $p=2$ point has slightly lower weight eRank, nearly unchanged actual activation eRank, modestly higher fixed-input eRank, and higher values of both CKAs.
+
+The figure is useful for narrowing explanations. Activation eRank and CKA distinguish HHH from HHF, yet do not directly provide a coefficient-selection objective within HHF. $\mathcal{S}_p$ WD adds a way to adjust the model; task outcomes and representation diagnostics are still needed to judge the adjustment.
+
+<details>
+<summary>How ranks and CKA are measured</summary>
+
+Weight ranks use the full $768\times768$ V matrix. Actual activation ranks use each layer's centered sampled $1024\times768$ V output and therefore include that checkpoint's own upstream representations. Fixed-input measurements use the HHF control's layer inputs with each checkpoint's V weights. The plotted ranks average over 12 layers.
+
+For two centered head outputs $Z_i,Z_j\in\mathbb R^{1024\times128}$, linear CKA is
+
+$$
+\operatorname{CKA}(Z_i,Z_j)
+=\frac{\lVert Z_i^\top Z_j\rVert_F^2}
+{\lVert Z_i^\top Z_i\rVert_F\,\lVert Z_j^\top Z_j\rVert_F}.
+$$
+
+The 15 pairs among six heads are averaged first, followed by the 12 layers [@kornblith2019cka]. Higher CKA means more similar representations under this statistic and may suggest representational redundancy.
+
+</details>
+
+This case gives $\mathcal{S}_p$ WD a concrete role: **retain the task-update rule while specifying how weights shrink according to mode size.** It can participate in recipe tuning, with outcomes depending on whether the preference fits the learning task. The next case reduces the loss difference further and asks how much internal geometry this freedom can leave behind.
+
+## 5. Case study: nearly the same pretraining loss, different rank geometry
+
+### 5.1 Choosing a spectral preference for each module
+
+If two decay recipes reach almost the same pretraining loss, do their internal representations also look alike? We compare ordinary WD with an asymmetric recipe that assigns different powers to different modules.
+
+Attention mixes information across tokens, while the MLP mainly transforms features within each token. This division suggests a concrete experiment: use $p_A=0$ for Attention to put relatively more shrinkage pressure on weak modes, and $p_M=2$ for the MLP to reduce the relative dominance of large modes. The motivation connects to low-rank attention analysis and module-wise decay allocation [@kobayashi2024lowrankattention; @he2025alphadecay].
+
+Both families use Muon for matrix updates and independent decay: $\eta_t$ multiplies task and decay branches, without another factor of $\alpha$ on $\lambda_A,\lambda_M$ or an additional ordinary-WD term. These coefficients cannot be compared directly with the preceding section's LR-coupled values.
+
+Ordinary WD uses $p_A=p_M=1$; asymmetric decay uses $p_A=0,p_M=2$, with $A,M$ denoting Attention and MLP. Both families allow module-wise coefficients and sweep the same base learning rates:
+
+$$
+\begin{aligned}
+\alpha&\in\{8\times10^{-4},2.529822\times10^{-3},8\times10^{-3}\},\\
+\lambda_A,\lambda_M&\in\{8\times10^{-5},2.529822\times10^{-4},8\times10^{-4}\}.
+\end{aligned}
+$$
+
+Each family has $3\times3\times3=27$ configurations, 54 in total. From the completed results, we select the pair with the closest final validation losses. These runs share the model, initialization, seed, ordered data stream, and validation data, train for 7,268 steps, and both use $\alpha=8\times10^{-4}$:
+
+| Run | Attention | MLP | Loss before LR cooldown | Final validation loss |
+|---|---|---|---:|---:|
+| Ordinary-WD baseline | $p=1,\ \lambda_A=2.52982213\times10^{-4}$ | $p=1,\ \lambda_M=8\times10^{-5}$ | 3.107320711 | **3.000562422** |
+| Asymmetric $\mathcal{S}_p$ | $p=0,\ \lambda_A=8\times10^{-5}$ | $p=2,\ \lambda_M=8\times10^{-5}$ | 3.109563260 | **3.000577086** |
+
+The endpoints differ by $1.4663\times10^{-5}$ nats.
+
+![Validation paths for the same-loss pair](/blog/rethinking-weight-decay/figures/asymmetric_case_study_article/asymmetric_same_loss_validation_path.png)
+
+*Figure 10. Selected ordinary-WD and asymmetric runs follow slightly different validation paths to almost the same endpoint. Both finish at step 7,268.*
+
+### 5.2 Similar loss leaves room for different internal geometry
+
+| Weight or product metric | Ordinary baseline | Asymmetric $\mathcal{S}_p$ |
+|---|---:|---:|
+| Attention spectral norm | 3.3083 | 4.6478 |
+| Attention stable rank | 89.90 | 78.75 |
+| Attention entropy eRank | 587.03 | 565.05 |
+| MLP spectral norm | 6.1150 | 4.1062 |
+| MLP stable rank | 184.28 | 258.61 |
+| MLP entropy eRank | 729.97 | 743.00 |
+| QK product stable rank | 15.57 | 17.06 |
+
+Asymmetric decay gives more concentrated Attention weight spectra and higher-stable-rank MLP spectra in this pair, broadly matching the intended preference. Interestingly, lower Attention weight ranks coexist with higher QK-product stable rank—another reminder that factors and products have different geometry.
+
+![Rank geometry at the same-loss endpoints](/blog/rethinking-weight-decay/figures/asymmetric_case_study_article/asymmetric_same_loss_different_rank.png)
+
+*Figure 11. The selected pair reaches almost the same final validation loss while differing in Attention rank, MLP rank, QK-product rank, attention entropy, activation scale, and branch-output scale. Each panel is a paired endpoint diagnostic.*
+
+The forward computation also differs. From ordinary WD to asymmetric decay, normalized attention entropy falls from $0.5814$ to $0.5672$, while mean maximum attention probability rises from $0.2408$ to $0.2671$. Q activation RMS rises from $1.2088$ to $1.3064$, whereas MLP output RMS falls from $2.0829$ to $1.7333$. Almost the same loss accommodates different information allocation and internal scales.
+
+![Normalized spectra at the same-loss endpoints](/blog/rethinking-weight-decay/figures/asymmetric_case_study_article/asymmetric_same_loss_normalized_spectra.png)
+
+*Figure 12. Normalized singular-value spectra for the same pair. Attention and MLP shape differences persist at similar validation loss; the norm statistics in the table provide the absolute-scale comparison.*
+
+This pair shows another use for $\mathcal{S}_p$ WD: **exploring different internal spectra at similar pretraining loss.** Powers and module coefficients both change, so the difference cannot be attributed to the exponents alone, nor does it establish which structure is better. It does leave a useful question: how do these structures affect transfer, fine-tuning, or robustness? Similar pretraining loss provides a starting point for that comparison.
+
+## 6. A related extension: spectral projection in the decay branch
+
+The exponent $p$ makes shrinkage vary smoothly with mode size. Another choice is to decay only part of the spectrum. Recent work uses a shifted Gram matrix and symmetric matrix sign to select momentum subspaces on either side of a threshold [@goyal2026spectrallytargetedmuon]. Applying the projection to weights instead gives band-selective decay while retaining the task optimizer's update rule.
+
+**From a threshold to a projector.** First consider $W\in\mathbb R^{m\times n}$ with $m\ge n$, assuming no singular value lies exactly at the threshold $\tau$. Set $G=W^\top W\in\mathbb R^{n\times n}$ and
+
+$$
+A=G-\tau^2I_n,
+\qquad J=\operatorname{msign}(A),
+\qquad P_{\mathrm{top}}=\frac{I_n+J}{2},\quad
+P_{\mathrm{bot}}=\frac{I_n-J}{2}.
+$$
+
+Here $\tau>0$ is a singular-value threshold and $I_n$ is the identity. The symmetric matrix sign preserves eigenvectors and replaces eigenvalues by their signs: if $A=Z\operatorname{diag}(\xi_i)Z^\top$, then $\operatorname{msign}(A)=Z\operatorname{diag}(\operatorname{sign}\xi_i)Z^\top$. Since $\xi_i=\sigma_i(W)^2-\tau^2$, positive and negative eigenvalues separate modes above and below the threshold. The matrices $P_{\mathrm{top}},P_{\mathrm{bot}}$ select those subspaces.
+
+The source paper applies this construction to momentum $M$, obtaining $P_{\mathrm{top}}(M),P_{\mathrm{bot}}(M)$ from $M^\top M-\tau^2I$. With $Q_M=\operatorname{polar}(M)$, its task directions are
+
+$$
+D_{\mathrm{top}}=Q_MP_{\mathrm{top}}(M)+MP_{\mathrm{bot}}(M),
+\qquad D_{\mathrm{bot}}=MP_{\mathrm{top}}(M)+Q_MP_{\mathrm{bot}}(M).
+$$
+
+The selected subspace receives the polar direction, with raw momentum elsewhere. For decay, we can likewise apply $S_p$ selectively, retaining ordinary WD on the rest of the spectrum:
+
+$$
+T_{\tau,p}^{\mathrm{top}}(W)=S_p(W)P_{\mathrm{top}}(W)+W P_{\mathrm{bot}}(W),\\
+T_{\tau,p}^{\mathrm{bot}}(W)=W P_{\mathrm{top}}(W)+S_p(W)P_{\mathrm{bot}}(W).
+$$
+
+Another option is to apply $S_p$ only to the selected subspace,
+
+$$
+T_{\tau,p}^{\mathrm{top}}(W)=S_p(W)P_{\mathrm{top}}(W),\qquad
+T_{\tau,p}^{\mathrm{bot}}(W)=S_p(W)P_{\mathrm{bot}}(W).
+$$
+
+**Computing the signed projector without SVD.** Normalize the symmetric shifted matrix as $Z_0=A/(\lVert A\rVert_F+\varepsilon)$, and apply the convergent fifth-degree Newton–Schulz polynomial
+
+$$
+C_j=Z_j^2,\qquad
+Z_{j+1}=Z_j\left(3I-\frac{16}{5}C_j+\frac65 C_j^2\right).
+$$
+
+The odd polynomial preserves eigenvalue signs and drives modes away from zero toward $\pm1$. Computing $C_j$ first allows its square to be reused. Eigenvalues near the threshold are close to zero and converge more slowly; the source paper uses 20 FP32 iterations for both sign calls in NanoGPT [@goyal2026spectrallytargetedmuon]. Finite iterations give an approximate projector, so the iteration budget should account for the spectral gap around the threshold.
+
+**The extra decay freedom.** For fixed singular directions and a step small enough to preserve nonnegative modes, top-selective decay obeys
+
+$$
+\sigma_i^+=\sigma_i-\eta_t\lambda_{\tau,p}\sigma_i^p\mathbf1\{\sigma_i>\tau\}.
+$$
+
+Under a decay-dominated continuous-time approximation, this gives $\dot\sigma_i=-\lambda_{\tau,p}\sigma_i^p\mathbf1\{\sigma_i>\tau\}$. The threshold $\tau$ selects modes, $p$ sets their shrinkage law, and $\lambda_{\tau,p}$ controls strength. Recomputing the projectors from the current $W$ at each step also allows different powers and coefficients in the two subspaces. For $m\ge n$,
+
+$$
+W_{t+1}=W_t-\eta_t\left[
+\alpha D_t+\lambda_{\mathrm{top}}S_{p_{\mathrm{top}}}(W_t)P_{\mathrm{top}}
++\lambda_{\mathrm{bot}}S_{p_{\mathrm{bot}}}(W_t)P_{\mathrm{bot}}
+\right].
+$$
+
+Setting one coefficient to zero restricts decay to one band; taking $p=1$ and equal coefficients on both sides recovers ordinary WD.
+
+This adds a choice of which spectral band to regularize. Its appeal is that the head and tail can be assigned different regularization roles.
+
+## 7. Closing perspective
+
+Starting from ordinary WD, the central change is to turn uniform scaling into an explicit spectral preference. $\mathcal{S}_p$ WD uses one exponent to specify how modes shrink: $p=1$ preserves spectral ratios under isolated decay, $p<1$ puts relatively more pressure on weak modes, and $p>1$ on strong ones. The solvable linear model and eight-layer Transformer show that this preference can leave a clear spectral response.
+
+The case studies put that freedom back into the task. Head-wise Muon shows how spectral regularization can participate in tuning under a fixed update rule. Asymmetric decay then shows that almost identical pretraining loss can coexist with different weight spectra, activation statistics, and internal scales.
+
+What makes $\mathcal{S}_p$ WD worth studying is the ability to impose a specific preference on weight spectra and measure the response. Exponents, coefficients, module allocation, and possible band selection provide different levels of control. Which preferences lead to better learning, transfer, or generalization in a given task remains the interesting question. ORCA's stage-dependent spectral regularization during pretraining [@liu2026orca] and S²D's spectral decay for quantization [@chavan2026s2d] also suggest application directions worth exploring.
+
+> **When tuning weight decay, ask not only how much to shrink, but how shrinkage should be distributed across modes. Spectrum shaping supplies a means; task outcomes determine its value.**

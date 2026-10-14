@@ -1,0 +1,33 @@
+\documentclass[11pt,border=10pt]{standalone}
+\usepackage{amsmath,amssymb}
+\usepackage{algpseudocode}
+\usepackage{lmodern}
+\newcommand{\Polar}{\operatorname{polar}}
+\newcommand{\Pow}{\operatorname{pow}}
+\begin{document}
+\begin{minipage}{6.55in}
+\hrule\vspace{5pt}
+\textbf{Algorithm 1.} Spectral-power weight decay
+\par\vspace{5pt}\hrule\vspace{8pt}
+\begin{algorithmic}[1]
+\Statex \textbf{Input:} $W_t,D_t\in\mathbb R^{m\times n}$; integer $p\ge0$; polar iterations $T$, stabilizer $\varepsilon$;
+\Statex \hspace{1.1em}fixed $\alpha,\lambda_{\mathrm{wd}},\lambda_p$; schedule $\eta_t$.
+\Statex
+\State $Q\gets W_t$
+\If{$p\bmod2=0$}
+    \State $Q\gets\Polar(W_t;T,\varepsilon)$ \Comment{$Q\approx UV^{\top}$; Polar Express [1]}
+\EndIf
+\State $G\gets W_t^{\top}W_t$ if $m\ge n$, otherwise $G\gets W_tW_t^{\top}$
+\State $H\gets\Pow(G,p\mathbin{//}2)$ \Comment{integer matrix power}
+\State $S\gets QH$ if $m\ge n$, otherwise $S\gets HQ$
+\State \Return $W_t-\eta_t[\alpha D_t+\lambda_{\mathrm{wd}}W_t+\lambda_p S]$
+\end{algorithmic}
+\vspace{6pt}
+\small
+$\Pow(G,0)=I$; use repeated squaring. $\Polar$ returns the active polar factor,
+with $\Polar(0)=0$. For $p\le1$, the unused Gram can be skipped unless needed later.
+\par\vspace{5pt}
+[1] Amsel et al. (2025). \textit{The Polar Express}. arXiv:2505.16932.
+\par\vspace{8pt}\hrule
+\end{minipage}
+\end{document}

@@ -48,6 +48,10 @@ scripts/latex-importer/output/
 .temp-*/
 *.log
 
+# Local research release bundles and upload archives
+/reference/
+/rethinking_weight_decay_release_20261011.zip
+
 # editor / OS noise
 .DS_Store
 .idea/

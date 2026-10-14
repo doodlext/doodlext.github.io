@@ -47,6 +47,11 @@
   text-align: justify;
 }
 
+/* CJK text does not benefit from the wide word spacing of full justification. */
+html[lang^="zh"] .article-page .article-prose > p {
+  text-align: start;
+}
+
 .article-page .article-prose :is(h2, h3, h4) {
   text-wrap: balance;
   scroll-margin-top: 1rem;

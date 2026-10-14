@@ -29,6 +29,8 @@ Personal information in this repository is limited to the public introduction, c
 | Publications list, displayed on the separate Publications page | `src/data/publications.ts` |
 | Homepage News & Updates | `src/data/site-news.ts` |
 | Blog example | `src/content/example-post/article.mdx` |
+| First research blog (English) | `src/content/rethinking-weight-decay/article.mdx` |
+| First research blog (中文) | `src/content/rethinking-weight-decay-zh/article.mdx` |
 | Bibliography | `src/content/bibliography.bib` |
 | Site icons | `public/favicon.svg`, `public/favicon.ico` |
 
@@ -37,6 +39,14 @@ Personal information in this repository is limited to the public introduction, c
 Copy `src/content/example-post/`, rename the directory, and update the frontmatter and content in `article.mdx`. The directory name becomes the `/blog/<directory-name>/` URL. Blog, Browse, RSS, and the sitemap discover posts automatically. The homepage shows the introduction, News & Updates, and Services.
 
 The example includes a formula, Python code, a `Note` component, and an Adam citation. It is a starter example rather than a personal publication record. Authors default to `SITE_AUTHOR`, or can be specified in the frontmatter with `authors`.
+
+The first research post is available at `/blog/rethinking-weight-decay/`, with a Chinese translation at `/blog/rethinking-weight-decay-zh/`. Each version declares `language`, `translationUrl`, and `translationLabel` in its frontmatter; the Chinese translation also uses `hiddenFromIndex: true` so Blog, Browse, RSS, and the sitemap list the English post only. Use the same pattern for future translations.
+
+For citations, write `[@key]` in the MDX and add the matching entry to `src/content/bibliography.bib`. The article footer then generates linked author-year citations, the reference list, backreferences, and a copyable BibTeX record automatically. Set `citationKey` in frontmatter when a stable citation key is preferred.
+
+Use `[@key1; @key2]` for one grouped parenthetical citation, or `@key` for a narrative citation such as “Author (year).” The formatter supplies names and parentheses; do not add another pair around `[@key]` or manually repeat the author name. Put equation and theorem numbers in the surrounding prose. The weight-decay post uses LaTeX pseudocode images: edit the `.tex` sources under `public/blog/rethinking-weight-decay/algorithms/`, compile them, and render the matching `.png` files at 450 dpi or higher. Keep intermediate PDFs and build files in ignored `reference/`; both language versions share the images and link to the editable source. For other posts, the optional `src/components/Algorithm.astro` wrapper supports numbered MDX steps and LaTeX math.
+
+The complete `rethinking_weight_decay_release_20261011.zip` bundle is extracted under `reference/` for local reference. The archive and directory are ignored by Git. Only the web article and its linked figure exports are kept in the public site, so raw experiment files do not enter commits by accident.
 
 Every new MD/MDX post uses `src/layouts/ArticlePage.astro` and the shared reading styles in `src/styles/_article.css`. The article column grows with the window up to `--article-reading-width` (44 rem by default), with responsive outer gutters, font size, and heading spacing. On wide screens, introductory/body paragraphs are justified; on phones and narrow tablets, they use natural left alignment. Write paragraphs normally without adding manual line breaks to fit one screen.
 

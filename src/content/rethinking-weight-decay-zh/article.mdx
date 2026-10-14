@@ -1,0 +1,664 @@
+---
+title: "重新思考 Weight Decay\n从标量收缩到谱动力学"
+subtitle: "Weight decay 不只关乎尺度：当衰减方向也成为设计变量，训练会发生什么？"
+description: "从普通 weight decay 与优化器演化到谱幂衰减：通过可解线性模型与 Transformer 对照实验，区分谱几何变化、表示变化与训练收益。"
+published: "2026-10-11"
+modified: "2026-10-14"
+template: "article"
+category: "Research notes"
+citationKey: "tang2026_rethinking_weight_decay"
+authors:
+  - name: "Xuan Tang"
+    url: "/"
+    affiliations: [1]
+  - name: "Difan Zou"
+    url: "https://difanzou.github.io/"
+    affiliations: [1]
+affiliations:
+  - name: "The University of Hong Kong"
+    url: "https://www.hku.hk/"
+tags:
+  - 优化
+  - weight decay
+  - 谱动力学
+  - Muon
+  - Transformer
+tableOfContentsAutoCollapse: true
+showPdf: false
+language: zh-CN
+translationUrl: /blog/rethinking-weight-decay/
+translationLabel: English
+hiddenFromIndex: true
+---
+
+import Note from "../../components/Note.astro";
+
+## Weight decay 也有方向
+
+谈到 weight decay，我们通常先想到一个系数：该设多大，要不要随学习率变化，不同模块是否应该分别调整。这些问题都在问“衰减多少”。还有一个更少被讨论的选择：**衰减应该沿着什么方向？**
+
+AdamW 把任务更新与权重衰减拆开后，这个问题就变得很自然。优化器根据梯度决定如何学习，衰减分支则根据当前权重施加正则化。普通 WD 选择沿着 $W$ 收缩；对于矩阵权重，我们还可以利用它的奇异值结构。
+
+普通 WD 的孤立收缩步会减小 Frobenius 范数，却保持所有奇异值的相对比例。它直接调整尺度，不直接重分配谱质量。
+
+**谱幂权重衰减（spectral-power weight decay）**，记作 $\mathcal{S}_p$ WD，把标量收缩替换为奇异值幂方向。对权重矩阵 $W\in\mathbb R^{m\times n}$，设其 rank-$r$ SVD 为 $W=U\operatorname{diag}(\sigma_1,\ldots,\sigma_r)V^\top$；$U,V$ 的列是正交归一的奇异向量，$\sigma_i>0$ 是有效奇异值。定义
+
+$$
+S_p(W)=U\operatorname{diag}(\sigma_1^p,\ldots,\sigma_r^p)V^\top.
+$$
+
+这里 $p\ge0$ 控制不同大小的奇异值受到怎样的衰减，$S_p(W)$ 表示方向，$\mathcal{S}_p$ WD 表示采用这一方向的正则化方法。它对应的 Schatten-$(p+1)$ 惩罚是
+
+$$
+R_p(W)=\frac{1}{p+1}\sum_{i=1}^{r}\sigma_i^{p+1}
+=\frac{1}{p+1}\lVert W\rVert_{S_{p+1}}^{p+1}.
+$$
+
+其中 Schatten 范数为 $\lVert W\rVert_{S_q}=(\sum_i\sigma_i^q)^{1/q}$。$p>0$ 时，$S_p=\nabla R_p$；$p=0$ 时，它是核范数的一个次梯度 [@lewis1995spectral; @watson1992subdifferential]。普通 WD 对应 $p=1$；改变 $p$，就能让衰减对谱头与谱尾表现出不同偏好。
+
+有了这种谱偏好，我们还想知道：权重的变化会如何影响网络表示，又能否带来更好的任务表现？后文会结合权重谱、激活谱和 validation loss 来观察这些问题，先说明这三个层面各自能告诉我们什么。
+
+<Note variant="neutral" title="需要始终区分的三个层面" emoji="↗">
+
+**权重谱**刻画参数的模态分布，是观察正则化几何作用的起点；**激活谱**告诉我们，这种权重遇到输入后产生了什么表示；**validation loss**则回答，这些变化是否帮助了任务。
+
+三者相关，却不能相互替代。$\mathcal{S}_p$ WD 是正则化方法：它根据权重施加谱偏好，不根据当前任务梯度选择下降方向。它的价值需要放回训练中观察，而不是由某个 rank 指标单独决定。
+
+</Note>
+
+## 1. 从普通 weight decay 到解耦优化器
+
+### 1.1 L2 正则在普通 SGD 中变成 weight decay
+
+Ridge regression 与 Tikhonov 正则通过二次惩罚控制参数规模 [@hoerl1970ridge; @tikhonov1977solutions]：
+
+$$
+\min_W L(W)+\frac{\beta}{2}\lVert W\rVert_F^2.
+$$
+
+其中 $L$ 是任务损失，$\beta\ge0$ 是 L2 惩罚系数，$\alpha>0$ 是基础步长，$\eta_t\ge0$ 是随时间变化的 schedule 乘子。普通 SGD 给出
+
+$$
+W_{t+1}=W_t-\eta_t\alpha\nabla L(W_t)-\eta_t\alpha\beta W_t
+=W_t-\eta_t[\alpha\nabla L(W_t)+\lambda W_t],
+\qquad \lambda=\alpha\beta.
+$$
+
+匹配系数后，L2 正则与 weight decay 在普通 SGD 下等价。Frobenius 范数衡量矩阵的总能量；用奇异值写，就是
+
+$$
+\lVert W\rVert_F^2=\sum_i\sigma_i^2.
+$$
+
+早期 weight decay 分析已经研究了这种尺度控制如何抑制无关成分和目标噪声 [@krogh1991weightdecay]。
+
+### 1.2 动量与自适应梯度改变优化路径
+
+动量引入梯度的时间平均 [@sutskever2013momentum]，AdaGrad 与 Adam 进一步加入逐坐标预条件 [@duchi2011adagrad; @kingma2015adam]。设 $w_t$ 为向量化参数，$g_t$ 为随机任务梯度，$P_t$ 为依赖梯度历史的预条件算子；在 Adam 中，它由二阶矩估计的平方根及数值稳定项构造对角逆尺度。暂时省略动量平均，耦合 L2 项的放置位置可以示意为
+
+$$
+w_{t+1}=w_t-\eta_t\alpha P_t(g_t+\beta w_t).
+$$
+
+独立衰减则直接作用在参数上：
+
+$$
+w_{t+1}=w_t-\eta_t\alpha P_tg_t-\eta_t\lambda w_t.
+$$
+
+普通 SGD 对应 $P_t=I$，此时令 $\lambda=\alpha\beta$ 即可得到相同更新；到了 Adam，L2 项会进入预条件与状态估计，因而通常不再等价于 AdamW 的独立衰减。这一区别也与两者的泛化行为有关 [@zou2023adamregularization; @tang2025understanding]。
+
+### 1.3 AdamW 暴露出独立衰减分支
+
+AdamW 明确区分了正则项的放置位置 [@loshchilov2019adamw]。本文使用 independent-WD 形式
+
+$$
+W_{t+1}=W_t-\eta_t\left[
+\underbrace{\alpha D_t}_{\text{任务更新}}
++\underbrace{\lambda W_t}_{\text{独立 weight decay}}
+\right].
+$$
+
+$D_t$ 是优化器由任务梯度及其状态产生的矩阵方向；$\alpha$、$\lambda$ 是固定基础系数，$\eta_t$ 统一承载随时间变化的调度。衰减项直接作用于参数，不进入优化器的预条件与状态估计。“解耦”说的是这个位置上的分离，两条分支仍可共享同一 schedule。
+
+围绕这条分支，已有不少研究在改进衰减强度。AdaDecay 根据梯度统计分配逐参数衰减率 [@nakamura2019adaptive]；adaptive WD 根据任务更新与 L2 更新的相对强度调整系数，以改善鲁棒性 [@ghiasi2023robustness]；AlphaDecay 则在 LLM 中按模块分配衰减，追求 heavy-tailed balancing [@he2025alphadecay]。
+
+这些工作让“衰减多少、施加在哪”变得更灵活。逐参数系数也会改变相对收缩，因此系数与几何并非完全分离。本文进一步关心的是：能否直接在权重的奇异基上，指定不同模态的收缩规律？
+
+### 1.4 矩阵优化器把几何显式化
+
+K-FAC、Shampoo、SOAP 与 Muon 分别以不同方式改变任务更新的几何 [@martens2015kfac; @gupta2018shampoo; @vyas2024soap; @jordan2024muon]。Muon 尤其直接：理想化的矩阵更新保留动量矩阵的奇异方向，并把有效奇异值替换为 1 [@jordan2024muon]。Polar Express 提供了高效近似 [@amsel2025polarexpress]。
+
+既然任务更新已经充分利用矩阵结构，衰减分支也值得作同样的审视。不过，两者面对的是不同对象：Muon 处理任务动量，$\mathcal{S}_p$ WD 处理当前权重。相同的矩阵运算可以出现在两条分支中，承担的作用却不同。
+
+## 2. 普通 weight decay 控制了什么
+
+### 2.1 孤立收缩改变尺度，不改变归一化形状
+
+先单独看衰减这一步。对非零矩阵 $W=U\Sigma V^\top$，其中 $\Sigma=\operatorname{diag}(\sigma_i)$，记当前 schedule 乘子为 $\eta$。当 $0\le a<1$ 时，普通 WD 给出
+
+$$
+W^+=(1-a)W,
+\qquad a=\eta\lambda,
+$$
+
+因此
+
+$$
+\sigma_i^+=(1-a)\sigma_i,
+\qquad
+\frac{\sigma_i^+}{\sigma_1^+}=\frac{\sigma_i}{\sigma_1}.
+$$
+
+谱范数和 Frobenius 范数一起缩小，归一化谱、stable rank 与 eRank 则保持不变。这是普通 WD 最直接的几何作用。完整训练中，任务更新会改变奇异值和奇异方向，衰减系数也会通过训练轨迹影响最终谱 [@loshchilov2019adamw]。
+
+### 2.2 Frobenius 控制有用，但不等于谱形状控制
+
+这个区别也解释了普通 WD 为什么仍可能与低秩结构有关。已有研究讨论了 WD 与优化过程的多种交互 [@zhang2019mechanisms]；在因子化 attention 中，模型的行为还依赖权重的乘积。设 query、key 权重为 $W_Q,W_K$，令 $P=W_Q^\top W_K$。当因子维度足以表示 $P$ 时，有经典关系 [@srebro2004mmmf]：
+
+$$
+\lVert P\rVert_*=
+\min_{AB^\top=P}\frac{\lVert A\rVert_F^2+\lVert B\rVert_F^2}{2}.
+$$
+
+这里 $\lVert P\rVert_*=\sum_i\sigma_i(P)$ 是核范数，$A,B$ 遍历相容的因子。等式对因子化取了最小值：它把因子的二次惩罚与乘积的低秩偏好联系起来，但不要求任意训练时刻的因子都达到这个最小值。低秩 attention 的相关分析也依赖具体的平衡与动力学条件 [@kobayashi2024lowrankattention]。
+
+范数控制还有另一条作用路径：改变有效步长。在尺度不变的参数化中，参数范数会影响同样一次更新带来的函数变化 [@vanlaarhoven2017l2]。Hyperball 直接固定权重与优化器更新的 Frobenius 范数 [@wen2026hyperball]。从角度变化看，对较小的任务步有
+
+$$
+\Delta\theta_t\approx\frac{\eta_t\alpha\lVert D_{t,\perp}\rVert_F}{\lVert W_t\rVert_F},
+\qquad D_{t,\perp}=D_t-
+\frac{\langle D_t,W_t\rangle_F}{\lVert W_t\rVert_F^2}W_t.
+$$
+
+其中 $D_{t,\perp}$ 是任务方向在权重球面上的切向分量，$\langle A,B\rangle_F=\operatorname{tr}(A^\top B)$。当任务方向范数受控时，$\eta_t\alpha/\lVert W_t\rVert_F$ 可作为 effective learning rate（ELR）的代理。
+
+### 2.3 全文统一的符号与秩指标
+
+对非零 $W\in\mathbb R^{m\times n}$，将奇异值排序为 $\sigma_1\ge\cdots\ge\sigma_R\ge0$，其中 $R=\min(m,n)$ 包括零模态。令 $r_i=\sigma_i/\sigma_1$；对概率向量 $q$，定义 $H(q)=-\sum_iq_i\log q_i$，约定 $0\log0=0$。谱范数为 $\lVert W\rVert_2=\sigma_1$，top-$k$ 中的 $k$ 表示保留的主导模态数。
+
+| 指标 | 定义 | 含义 |
+|---|---|---|
+| 代数秩 [@higham2002accuracy] | 非零 $\sigma_i$ 的数量 | 有效子空间的精确维度 |
+| Stable rank [@sanyal2020stablerank] | $\lVert W\rVert_F^2/\lVert W\rVert_2^2=\sum_i r_i^2$ | 相对于最大模态的总平方能量 |
+| 熵有效秩 eRank [@roy2007effectiverank] | $\exp H(q)$，$q_i=\sigma_i/\sum_j\sigma_j$ | 携带奇异值质量的有效模态数 |
+| 输出能量有效秩 [@roy2007effectiverank] | $\exp H(q^{(2)})$，$q_i^{(2)}=\sigma_i^2/\sum_j\sigma_j^2$ | 各向同性输入下承载输出能量的有效模态数 |
+| Top-$k$ 能量 [@eckart1936approximation] | $\sum_{i\le k}\sigma_i^2/\sum_j\sigma_j^2$ | 前 $k$ 个模态的能量集中度 |
+| 归一化谱熵 [@shannon1948communication] | $H(q)/\log R$ | 相对于均匀谱的熵 |
+
+Stable rank 与 eRank 都不随整体缩放而变化，但关注谱的不同方面，未必同向变化。输出能量有效秩使用奇异值的平方作为权重；attention entropy 则来自 softmax 后的注意力分布，是另一种统计量 [@roy2007effectiverank; @vaswani2017attention; @zhai2023entropy]。后文中的“rank”默认指所标注的有效秩指标，不等同于代数秩。
+
+## 3. 谱幂权重衰减：方向、理论与谱塑形
+
+### 3.1 定义与对应惩罚
+
+普通 WD 给所有奇异值相同的相对收缩。要改变这种偏好，一个直接的做法就是改变奇异值的幂次：
+
+$$
+S_p(W)=U\Sigma^pV^\top,
+\qquad
+\Sigma^p=\operatorname{diag}(\sigma_i^p),
+\qquad W=U\Sigma V^\top.
+$$
+
+几个基本情形是
+
+$$
+S_0(W)=UV^\top,
+\qquad S_1(W)=W,
+\qquad S_2(W)=U\Sigma^2V^\top.
+$$
+
+$p=1$ 恢复普通 WD；$p=0$ 沿有效子空间的 polar 方向，对非零模态给出等量的绝对衰减；$p=2$ 对大模态施加更强的绝对及相对衰减。零模态对 $S_0$ 的贡献约定为零，与有效 polar 因子和核范数次微分一致 [@higham1986polar; @watson1992subdifferential; @cai2010svt]。
+
+当 $p>0$ 时，$S_p$ 是下列酉不变谱惩罚的梯度：
+
+$$
+R_p(W)=\frac{1}{p+1}\sum_i\sigma_i^{p+1}
+=\frac{1}{p+1}\lVert W\rVert_{S_{p+1}}^{p+1}.
+$$
+
+方向的幂次是 $p$，惩罚的阶数是 $p+1$ [@lewis1995spectral]。$p=0$ 时，$R_0$ 是不可微的核范数，$S_0$ 是一个合法的次梯度选择 [@cai2010svt; @watson1992subdifferential]，以鼓励低秩结构 [@andriianov2026spectralwd]。
+
+本文使用独立更新
+
+$$
+W_{t+1}=W_t-\eta_t\left[
+\alpha D_t+\lambda_pS_p(W_t)
+\right],
+$$
+
+沿用前面的固定基础系数与 schedule 约定。改变 $p$ 会同时改变方向的范数和模态间的相对分配，因此相同 $\lambda_p$ 并不代表相同衰减强度。
+
+### 3.2 $\mathcal{S}_p$ WD 计算实现
+
+设 $W\in\mathbb R^{m\times n}$，其中 $m$ 是输出维度，$n$ 是输入维度。下面的高效实现针对整数 $p\ge0$；选择较小的 Gram 矩阵，并记有效 polar 因子为 $Q_W=UV^\top$。对非负整数 $k$，有
+
+$$
+\begin{array}{c|c|c|c}
+\text{形状} & G\text{ 及其大小} & S_{2k}(W) & S_{2k+1}(W)\\ \hline
+m\ge n & W^\top W\in\mathbb R^{n\times n} & Q_WG^k & WG^k\\
+m<n & WW^\top\in\mathbb R^{m\times m} & G^kQ_W & G^kW
+\end{array}
+$$
+
+其中 $Q_W$ 可用 Polar Express 高效近似 [@amsel2025polarexpress]。
+
+![算法 1：用 Gram 矩阵与 polar 函数计算谱幂权重衰减。](/blog/rethinking-weight-decay/algorithms/spwd.png)
+
+*算法 1：用 Gram 矩阵与 polar 函数计算谱幂权重衰减。* Polar 算法采用 Polar Express [@amsel2025polarexpress]。
+
+计算只需要较小 Gram 的矩阵乘法，以及偶数 $p$ 所需的 polar 迭代。高次幂可用重复平方复用结果，例如 $G^4=(G^2)^2$；$p=0,1$ 不需要计算 Gram。实际开销仍取决于矩阵大小、幂次和迭代数。下面用 PE8 检查近似精度。
+
+<details>
+<summary>PE8 与 SVD：小矩阵实现检查</summary>
+
+检查 FP32 PE8 在满秩 $64\times64$、$128\times64$、$64\times128$ 矩阵上的结果，使用 seed 42–44 和对数等距奇异值。条件数记作 $\kappa_{\mathrm{cond}}=\sigma_1/\sigma_R$。八组五次多项式系数来自 Polar Express 构造，设计下界 $\ell=10^{-3}$、安全缩放为 1.01。参考是同一个 FP32 输入的 FP64 SVD；表中给出九个形状/seed 组合中最大的相对 Frobenius 误差 $\lVert\widehat S_p-S_p^{\mathrm{SVD}}\rVert_F/\lVert S_p^{\mathrm{SVD}}\rVert_F$。
+
+| $\kappa_{\mathrm{cond}}$ | $p=0$ | $p=2$ | $p=4$ |
+|---:|---:|---:|---:|
+| $10$ | $2.81\times10^{-6}$ | $2.85\times10^{-6}$ | $2.87\times10^{-6}$ |
+| $10^3$ | $6.66\times10^{-5}$ | $3.02\times10^{-6}$ | $2.96\times10^{-6}$ |
+| $10^6$ | $0.549$ | $2.68\times10^{-6}$ | $2.67\times10^{-6}$ |
+
+$p=1$ 直接返回 $W$。加入的病态 $10^6$ case 将大量归一化模态放在多项式设计区间以下，八次迭代不足以在等权 polar 方向 $p=0$ 中恢复它们；$p=2,4$ 通过 $\sigma_i^p$ 压低了小模态的贡献，因此这些方向的相对误差很小。
+
+</details>
+
+### 3.3 纯衰减与系数依赖的谱形状
+
+**先看衰减自身会做什么。** 当训练后期的实际任务分支满足 $\alpha\lVert D_t\rVert_F\ll\lambda_p\lVert S_p(W_t)\rVert_F$ 时，纯衰减也可作为局部近似。由于两条分支共享 $\eta_t$，学习率下降本身并不保证进入这一情形。记连续时间 $t$ 为累计 schedule 时间 $\sum_j\eta_j$，并令 $\lambda=\lambda_p$。衰减保持奇异方向，奇异值满足
+
+$$
+\dot\sigma_i=-\lambda\sigma_i^p.
+$$
+
+若初始模态为正，
+
+$$
+\sigma_i(t)=
+\begin{cases}
+[\sigma_i(0)-\lambda t]_+, & p=0,\\
+\sigma_i(0)e^{-\lambda t}, & p=1,\\
+\left[\sigma_i(0)^{1-p}+(p-1)\lambda t\right]^{-1/(p-1)}, & p>1.
+\end{cases}
+$$
+
+相对衰减率为
+
+$$
+-\frac{\dot\sigma_i}{\sigma_i}=\lambda\sigma_i^{p-1}.
+$$
+
+$p=1$ 让所有模态损失相同的比例；$p>1$ 更强地压缩大模态的相对幅度，使归一化谱趋于平坦；$0\le p<1$ 则让小模态相对衰减更快，在连续流中可以有限时间到达零。
+
+这里要区分连续流与有限步实现：$p=0$ 的正部解也是核范数近端软阈值的形式 [@cai2010svt; @parikh2014proximal]，但显式 polar 更新若跨过零点，奇异值会成为 $|\sigma_i-\eta\lambda|$，并不会自动截为零。后文用“压低谱尾”描述这种偏好。
+
+当 $W\ne0$ 时，
+
+$$
+\frac{\mathrm d}{\mathrm dt}\log\lVert W\rVert_F
+=-\lambda\frac{\sum_i\sigma_i^{p+1}}{\sum_i\sigma_i^2}.
+$$
+
+只有 $p=1$ 的相对 Frobenius 收缩速率与当前谱形状无关。
+
+![纯衰减的解析谱轨迹](/blog/rethinking-weight-decay/figures/asymmetric_case_study/pure_decay_shape.png)
+
+*图 1：不同累计衰减暴露量下的纯衰减轨迹。普通 WD 保持归一化谱；阈值化的 $p=0$ 流先去除小模态，而 $p=2$ 使相对谱变平。这些曲线呈现的是衰减主导时的局部机制。*
+
+**系数也会控制形状。** 记一次更新的 schedule 乘子为 $\eta$，并令 $r_i=\sigma_i/\sigma_1$、相对谱头步长 $\kappa=\eta\lambda\sigma_1^{p-1}$。只要这一步保持有效模态的符号和顺序，
+
+$$
+r_i^+=\frac{r_i-\kappa r_i^p}{1-\kappa},
+\qquad
+\frac{\partial r_i^+}{\partial\kappa}
+=\frac{r_i-r_i^p}{(1-\kappa)^2}.
+$$
+
+对 $0<r_i<1$，导数在 $p=1$ 时为零，在 $p>1$ 时为正，在 $0\le p<1$ 时为负。因此，$p$ 规定塑形的趋势，而系数决定这一步沿该趋势走多远；只有普通 WD 的归一化形状不随孤立衰减强度变化。
+
+### 3.4 线性 toy model：从权重谱到输出谱
+
+加入一个可解的任务，就能继续问：谱偏好与拟合目标相遇时，会留下什么结果？考虑稠密教师矩阵 $A=U_A\operatorname{diag}(a_i)V_A^\top$，其中 $a_i$ 为教师奇异值，$U_A,V_A$ 为奇异向量矩阵。分析
+
+$$
+\min_W\frac12\lVert W-A\rVert_F^2
++\frac{\lambda}{p+1}\sum_i\sigma_i(W)^{p+1}.
+$$
+
+本小节的 $\lambda$ 是损失中的惩罚系数；对于普通梯度下降，它对应前面更新式的 $\lambda_p/\alpha$。迹不等式使最优 $W$ 与 $A$ 的奇异向量对齐 [@lewis1995spectral]；平方损失强凸、谱惩罚凸，因此最优矩阵唯一。令其奇异值为 $s_i$，矩阵问题就化成逐模态方程 [@parikh2014proximal]：
+
+$$
+s_i+\lambda s_i^p=a_i\quad(p>0),
+\qquad s_i=(a_i-\lambda)_+\quad(p=0).
+$$
+
+$p=1$ 时，$s_i=a_i/(1+\lambda)$，所有模态按相同比例缩小。$p=2$ 且 $\lambda>0$ 时，
+
+$$
+s_i=\frac{\sqrt{1+4\lambda a_i}-1}{2\lambda},
+$$
+
+大模态受到更强的相对压缩。$p=4$ 时也有唯一非负根；$p=0$ 则恢复经典的奇异值软阈值 [@cai2010svt]。同一个拟合任务，因而可以用不同的正则化偏好得到不同谱形状。
+
+下面用普通梯度下降验证这些解，$p=0$ 采用近端更新。再利用白化输入，检查权重谱如何传递到输出。
+
+**有限样本验证。** 合成实验在 $d=6$ 维中构造 $N=512$ 个成对正负样本，利用白化思想 [@kessy2018whitening]，通过约化 QR 分解得到中心化设计矩阵 $X\in\mathbb R^{N\times d}$，使得
+
+$$
+\frac{X^\top X}{N}=I
+$$
+
+的最大绝对误差为 $6.66\times10^{-16}$，坐标均值最大绝对值为 $1.87\times10^{-17}$。教师矩阵非对角，奇异值为 $(4,2,1,0.4,0.15,0.05)$，取 $\lambda=0.2$。
+
+设 $\hat\sigma_i$ 为数值优化所得矩阵的奇异值，$s_i^\star$ 为对应解析最优值。两者一致：
+
+| $p$ | 解析奇异值 | $\max_i\lvert\hat\sigma_i-s_i^\star\rvert$ | 协方差–SVD 恒等式误差 |
+|---:|---|---:|---:|
+| 0 | $(3.8,1.8,0.8,0.2,0,0)$ | $5.29\times10^{-8}$ | $3.6\times10^{-15}$ |
+| 1 | $(3.3333,1.6667,0.8333,0.3333,0.125,0.0417)$ | $1.22\times10^{-9}$ | $3.6\times10^{-15}$ |
+| 2 | $(2.6235,1.5311,0.8541,0.3723,0.1458,0.0495)$ | $7.22\times10^{-10}$ | $3.6\times10^{-15}$ |
+| 4 | $(1.8175,1.3452,0.8800,0.3951,0.1499,0.0500)$ | $2.36\times10^{-9}$ | $3.6\times10^{-15}$ |
+
+协方差检查验证的是另一个恒等式。对中心化输出矩阵 $Y=XW^\top$，
+
+$$
+\frac{Y^\top Y}{N}
+=W\frac{X^\top X}{N}W^\top
+=WW^\top.
+$$
+
+输出协方差的非零特征值就是同一个 $W$ 的奇异值平方。表中最后一列检查这一恒等式，前一列则检查优化解与解析解的吻合程度。
+
+在这组解中，从 $p=0$ 到 $p=4$，输出能量有效秩由 $1.869$ 增至 $2.923$，激活 eRank 则由 $2.812$ 增至 $4.100$。两者都描述谱变得更分散，但分别使用奇异值平方与奇异值作为权重。
+
+![线性教师的解析谱与优化所得谱](/blog/rethinking-weight-decay/figures/linear_spectral_synthetic/linear_teacher_spectrum.png)
+
+*图 2：稠密线性教师实验：逐模态解析解与实际优化得到的矩阵谱。精确的有限样本白化，也使输出协方差与 SVD 的恒等关系可以在数值精度内得到验证。*
+
+### 3.5 八层 Transformer：谱塑形还在吗？
+
+在 8 层、宽度 512 的 SwiGLU Transformer 上，先固定衰减系数，比较 $p\in\{0,1,2,4\}$；再固定每个 $p$，扫描系数。
+
+**先改变幂次：谱头之外保留了多少相对质量？**
+
+![八层模型归一化权重谱](/blog/rethinking-weight-decay/figures/normalized_spectra.png)
+
+*图 3：各层归一化谱的中位数及 25–75% 层间区间。横轴为归一化奇异值序号，纵轴为 $\sigma_i/\sigma_1$。阴影表示层间差异。*
+
+较高的 $p$ 让最大奇异值之外的模态保留更多相对质量，在 MLP 扩张与投影矩阵上尤其明显，Q、K 的响应则较弱。这与纯衰减的直觉相符，也说明不同矩阵类型会以不同幅度回应同一种谱偏好。
+
+![绝对谱与归一化谱分布](/blog/rethinking-weight-decay/figures/spectral_distributions.png)
+
+*图 4：八层模型 MLP 扩张矩阵的谱概率质量分布。左图为绝对 $\log_{10}\sigma_i$，右图先用每个矩阵自身的最大奇异值归一化；各矩阵贡献相同概率质量。*
+
+绝对谱与归一化谱把这件事的两个侧面分开了：奇异值整体可以变小，同时谱主体向相对值 1 靠近。也就是说，谱头的主导程度减弱，不要求其余奇异值的绝对大小增加。图中每个矩阵贡献相同概率质量，平滑仅用于显示。
+
+在固定 $\lambda=0.01$ 的终点上，几个汇总指标为：
+
+| $p$ | MLP 稳定秩 | QK 稳定秩 | 归一化注意力熵 |
+|---:|---:|---:|---:|
+| 0 | 171.0 | 24.29 | 0.5771 |
+| 1 | 173.8 | 24.51 | 0.5758 |
+| 2 | 183.5 | 25.03 | 0.5823 |
+| 4 | 226.6 | 26.72 | 0.5982 |
+
+MLP 稳定秩的变化最突出，QK 稳定秩也逐渐上升；注意力熵则没有随每一次 $p$ 的增加而单调上升。这些指标描述不同计算对象，一个指标的变化并不直接决定另一个。
+
+**再改变系数：沿同一谱偏好走得更远，会怎样？** 从同一检查点的谱出发，解析纯衰减给出一个清楚的参照：
+
+![纯衰减的系数响应](/blog/rethinking-weight-decay/coefficient_sweep/coefficient_pure_decay.png)
+
+*图 5：同一检查点谱的解析纯衰减。$p=1$ 下改变系数只平移绝对对数谱，不改变归一化形状；其他幂次也改变谱形状。*
+
+$p=1$ 的系数只改变绝对谱的整体缩放；$p\ne1$ 时，系数还改变谱头与谱尾的相对比例。把这一对照放回完整训练，MLP expansion 在系数从 $0.003$ 增至 $0.03$ 时的终点变化为：
+
+| $p$ | 归一化对数谱距离 $D_{\mathrm{shape}}$ | 平均稳定秩变化 |
+|---:|---:|---:|
+| 0 | 0.01955 | −5.6% |
+| 1 | 0.00220 | −0.6% |
+| 2 | 0.03131 | +11.4% |
+| 4 | 0.06536 | +25.0% |
+
+<details>
+<summary>谱距离如何计算</summary>
+
+令 $r_{\ell i}^{(\lambda)}$ 为第 $\ell$ 层 MLP expansion 的第 $i$ 个奇异值除以该矩阵的最大奇异值。对八层、每层 512 个模态，计算
+
+$$
+D_{\mathrm{shape}}=\frac{1}{8\cdot512}
+\sum_{\ell=0}^{7}\sum_{i=1}^{512}
+\left|\log_{10}r_{\ell i}^{(0.03)}-\log_{10}r_{\ell i}^{(0.003)}\right|.
+$$
+
+它等于每层两个等权对数谱分布的一阶 Wasserstein 距离，再对层取平均，不依赖直方图的分箱或显示平滑。距离表示形状变化的幅度，稳定秩及谱曲线则帮助判断变化方向。
+
+</details>
+
+![完整训练后的系数响应](/blog/rethinking-weight-decay/coefficient_sweep/coefficient_trained.png)
+
+*图 6：完整训练后的 MLP expansion 谱。在已测系数范围内，$p=1$ 的归一化谱近似重合，其他幂次的形状变化更明显。*
+
+在这些 MLP expansion 终点中，普通 WD 的归一化谱接近重合，$p=2,4$ 的系数响应则明显得多。这里的“接近不变”只针对这类矩阵的归一化谱及已测系数范围：同一扫描中，普通 WD 下 Q、K 的平均稳定秩分别下降约 7.7% 和 14.4%。任务更新与衰减的共同作用，仍会留下不同于孤立衰减的结果。
+
+![不同衰减系数下的终点几何](/blog/rethinking-weight-decay/coefficient_sweep/coefficient_metrics.png)
+
+*图 7：系数扫描下的终点范数、秩指标、QK 乘积秩与归一化注意力熵。*
+
+例如在 $p=4$ 下，系数从 $0.003$ 增至 $0.03$，MLP 平均稳定秩由约 $200.7$ 升至 $250.9$，谱范数却由约 $2.54$ 降至 $1.75$：谱头变小了，相对于谱头的总能量增加了。
+
+到这里，理论中的谱偏好已经成为可测的训练现象：幂次和系数能共同改变权重的尺度与形状，响应依赖矩阵类型。接下来的问题是，这种调节放进一套具体训练配方后，能带来什么？
+
+## 4. Case study：Head-wise Muon 与 V 谱正则化
+
+### 4.1 从 HHH 到 HHF：改变 V 的更新方式
+
+GLM-5、Kimi K3 与 Qwen3.8-Next 的公开报告使用 head-wise Muon 更新 query、key、value 权重 [@glm2026glm5; @k3_2026; @qwen2026qwen38]；DeepSeek-V4.1-Flash 则只对 query、key 使用逐 head 更新 [@deepseek2026v41]。
+
+用 **H** 表示按 head 更新，**F** 表示按完整矩阵更新，字母顺序为 Q/K/V。HHH 对三个投影都按 head 切分；HHF 只把 V 改为跨 head 的完整矩阵。Muon 正交化的是任务动量，改变分组就改变了任务信号进入 V 的方式，并不直接要求权重或激活正交。
+
+在这个背景下，$\mathcal{S}_p$ WD 提供了一个可以单独调整的权重谱偏好。我们先比较 HHH 与 HHF，再固定 HHF 的更新规则加入谱项，观察两种几何选择如何配合。
+
+### 4.2 固定 HHF 更新规则，改变 V 的收缩偏好
+
+在完整 V 权重上加入 $p=2$ 谱项，同时保留 ordinary weight decay：
+
+$$
+W_{V,t+1}=W_{V,t}-\eta_t\left[
+\alpha D_{V,t}+\lambda_1W_{V,t}
++\lambda_2S_2(W_{V,t})
+\right],
+\qquad \lambda_1=0.1\alpha,\quad \lambda_2=\alpha\lambda_V.
+$$
+
+$0.1$ 与 $\lambda_V$ 沿用 LR-coupled 系数，乘当前学习率 $\eta_t\alpha$；换成本文记法便得到 $\lambda_1,\lambda_2$。理想衰减方向对应 $\lambda_1\lVert W_V\rVert_F^2/2+\lambda_2\sum_i\sigma_i(W_V)^3/3$ 的梯度。单独看衰减，在不跨零的步长下，第 $i$ 个模态的相对收缩为
+
+$$
+\frac{\Delta\sigma_i}{\sigma_i}\bigg|_{\mathrm{decay}}
+=-\eta_t\left(\lambda_1+\lambda_2\sigma_i\right).
+$$
+
+普通 WD 对所有模态施加相同的相对收缩，附加的 $p=2$ 项则更偏向压低大模态。这给出了一个明确的谱偏好，同时保留原来的 Muon 更新规则。
+
+实际谱项用更新前权重的 $(WW^\top)\operatorname{polar}(W)$ 计算 [@amsel2025polarexpress]。普通 WD 保留，谱项额外叠加。HHH → HHF → HHF + $\mathcal{S}_p$ 表示配方之间的比较。
+
+<details>
+<summary>训练协议与系数扫描</summary>
+
+HHH、HHF 与选定 $p=2$ 轨迹共享实现、初始化和有序数据流。模型为 12 层、宽度 768、head dimension 128，序列长度 4096，全局 batch 524,288 tokens，seed 42。训练 16,204 步，共 8,495,562,752 tokens；学习率先预热 256 步，再按 cosine 衰减到峰值的 0.1 倍，普通 WD 为 0.1。验证使用 10,485,760 tokens，共评估 164 次。Muon scale 为 $0.2\sqrt{\max(d_{\mathrm{in}},d_{\mathrm{out}})}$ [@liu2025muonscalable]，维度取原始完整投影的输入与输出维度。
+
+HHF 的附加 $p=2$ 系数覆盖 $\lambda_V=10^{-5}$ 到 $5\times10^{-4}$，在 $7\times10^{-5}$ 附近加密；$p=0$ 包含 $0.005$ 及 $0.004$–$0.010$ 的细扫描；$p=1$ 使普通 V WD 的总系数变为 $0.1+\lambda_V$。各幂次的 raw 系数不代表相同衰减强度。
+
+</details>
+
+### 4.3 改善来自哪里，rank 能告诉我们什么？
+
+最终 validation NLL 从 HHH 的 $3.01968$ 降到 HHF 的 $3.01596$，再到选定 HHF + $p=2$ 的 $3.01324$。前一步改变 V 的任务更新范围，后一步在相同更新规则上调整正则化；后者取 $\lambda_V=7\times10^{-5}$，相对 HHF 约改善 $0.00272$。
+
+两条 HHF 轨迹的整体 V weight RMS 很接近，附加谱步也远小于任务步。这里看到的是弱正则化持续参与训练的效果：前面的纯衰减分析帮助理解它施加的偏好，实际结果则来自它与任务更新的长期交互。
+
+![Head-wise 与 full-matrix V 更新对比](/blog/rethinking-weight-decay/figures/headwise_muon_latest/article-training-path.png)
+
+*图 8：共同初始化下 HHH、HHF 与选定 HHF + full-V $p=2$ 的完整训练轨迹。第一组对比改变 V 的 task-update scope；第二组固定 HHF 更新规则，增加谱正则化。*
+
+![最终 V 秩、跨 head 激活相似度与 validation loss](/blog/rethinking-weight-decay/figures/headwise_muon_latest/rank-vs-loss-extended.png)
+
+*图 9：上排是 V weight eRank、weight stable rank 与实际 V activation eRank；下排是 fixed-input V eRank、实际 activation head CKA 与 fixed-input head CKA。横轴为未除以维度的 rank 或 CKA，纵轴为 final validation NLL。叉号、星号表示 HHH、HHF；圆、方、菱形表示 HHF 上的 $p=0,1,2$ 扫描，三角形表示 HHH + $p=2$，粗边框标记各 family 的最佳点。虚线为 HHF control 的 loss。*
+
+**先看 HHH 与 HHF 两组。** 有些 HHH + $p=2$ 点的 weight eRank 或 stable rank 已高于 HHF，loss 却仍更高。相比之下，两组在实际 V activation eRank 和跨 head 相似度 CKA 上分得更开：HHH 一组的前者通常较低，后者较高。单看权重 rank 会错过这种表示差异；较高 rank 也没有补偿任务更新方式的差别。这与近期 Muon 分析中“权重谱形状与任务表现并不总是同步”的观察相呼应 [@goyal2026spectrallytargetedmuon]。
+
+**再看 HHF 内部的系数扫描。** 实际 activation eRank 的点云几乎竖直展开：有效维度接近，loss 仍有明显差别。最佳 $p=2$ 点相对 HHF 的 weight eRank 略降，实际 activation eRank 基本不变，fixed-input eRank 略升，两种 CKA 都有所提高。
+
+这张图更有用的地方，是帮助筛选解释：activation eRank 和 CKA 能区分 HHH/HHF 配方，却不能直接充当 HHF 内部选系数的目标。$\mathcal{S}_p$ WD 提供了新的调节方式，但它是否合适，仍要由任务结果和表示诊断共同回答。
+
+<details>
+<summary>Rank 与 CKA 如何测量</summary>
+
+weight rank 在完整 $768\times768$ V 矩阵上计算；actual activation rank 在各层抽样并中心化的 $1024\times768$ V 输出上计算，包含各 checkpoint 自身的上游表示。fixed-input 则使用 HHF control 的同一层输入与各 checkpoint 的 V 权重。图中各 rank 为 12 层平均。
+
+对于两个中心化 head 输出 $Z_i,Z_j\in\mathbb R^{1024\times128}$，linear CKA 为
+
+$$
+\operatorname{CKA}(Z_i,Z_j)
+=\frac{\lVert Z_i^\top Z_j\rVert_F^2}
+{\lVert Z_i^\top Z_i\rVert_F\,\lVert Z_j^\top Z_j\rVert_F}.
+$$
+
+六个 heads 的 15 对 CKA 先取平均，再对 12 层平均 [@kornblith2019cka]。较高 CKA 表示这一统计下的表示更相似，可能提示表示冗余。
+
+</details>
+
+这个案例给 $\mathcal{S}_p$ WD 的定位更具体了：**保持任务更新规则，额外指定权重如何按模态大小收缩。** 它可以参与配方调节，而实际表现取决于这种偏好是否与任务学习相容。下一个案例把 loss 差异进一步缩小，直接看这个自由度能留下多大的内部几何差异。
+
+## 5. Case study：近似相同的预训练 loss，不同的秩结构
+
+### 5.1 按模块选择谱偏好
+
+如果两种衰减配方达到几乎相同的预训练 loss，它们内部也会相似吗？我们用普通 WD 与一种按模块分配幂次的非对称衰减来观察这个问题。
+
+Attention 负责 token 之间的信息交互，MLP 主要在每个 token 内变换特征。这种分工提供了一个自然的尝试：Attention 取 $p_A=0$，相对更强地压低弱模态；MLP 取 $p_M=2$，减弱大模态的相对主导性。它与低秩 attention 分析及模块级衰减分配的思路相呼应 [@kobayashi2024lowrankattention; @he2025alphadecay]。
+
+两组都用 Muon 更新矩阵参数，采用独立衰减形式：$\eta_t$ 乘任务与衰减分支，$\lambda_A,\lambda_M$ 不再额外乘 $\alpha$，也不叠加普通 WD。因此，这里的系数不能直接与上一节的 LR-coupled 数值比较。
+
+普通 WD 取 $p_A=p_M=1$，非对称衰减取 $p_A=0,p_M=2$；$A,M$ 分别表示 Attention 与 MLP。两组都允许按模块调系数，并扫描相同的基础学习率：
+
+$$
+\begin{aligned}
+\alpha&\in\{8\times10^{-4},2.529822\times10^{-3},8\times10^{-3}\},\\
+\lambda_A,\lambda_M&\in\{8\times10^{-5},2.529822\times10^{-4},8\times10^{-4}\}.
+\end{aligned}
+$$
+
+每类 $3\times3\times3=27$ 组，共 54 组。我们从已完成结果中选取最终 validation loss 最接近的一对；它们共享模型、初始化、seed、有序数据流与验证数据，均训练 7,268 步，基础学习率均为 $\alpha=8\times10^{-4}$：
+
+| Run | Attention | MLP | 学习率末段衰减前 loss | 最终 validation loss |
+|---|---|---|---:|---:|
+| Ordinary-WD baseline | $p=1,\ \lambda_A=2.52982213\times10^{-4}$ | $p=1,\ \lambda_M=8\times10^{-5}$ | 3.107320711 | **3.000562422** |
+| Asymmetric $\mathcal{S}_p$ | $p=0,\ \lambda_A=8\times10^{-5}$ | $p=2,\ \lambda_M=8\times10^{-5}$ | 3.109563260 | **3.000577086** |
+
+终点相差 $1.4663\times10^{-5}$ nats。
+
+![相同 loss 配对的 validation path](/blog/rethinking-weight-decay/figures/asymmetric_case_study_article/asymmetric_same_loss_validation_path.png)
+
+*图 10：选定的普通 WD 与非对称衰减从略有不同的验证轨迹走向几乎相同的终点。两者均在第 7,268 步结束训练。*
+
+### 5.2 Loss 接近，内部几何仍有明显差别
+
+| 权重或乘积指标 | Ordinary baseline | Asymmetric $\mathcal{S}_p$ |
+|---|---:|---:|
+| Attention spectral norm | 3.3083 | 4.6478 |
+| Attention stable rank | 89.90 | 78.75 |
+| Attention entropy eRank | 587.03 | 565.05 |
+| MLP spectral norm | 6.1150 | 4.1062 |
+| MLP stable rank | 184.28 | 258.61 |
+| MLP entropy eRank | 729.97 | 743.00 |
+| QK product stable rank | 15.57 | 17.06 |
+
+非对称衰减对应更集中的 Attention 权重谱，以及稳定秩更高的 MLP 权重谱，整体符合设计时的偏好。有趣的是，Attention 权重 rank 较低，QK 乘积稳定秩却更高，再次说明因子与乘积的几何不能混为一谈。
+
+![相同 loss 终点的 rank geometry](/blog/rethinking-weight-decay/figures/asymmetric_case_study_article/asymmetric_same_loss_different_rank.png)
+
+*图 11：选定配对达到几乎相同的 final validation loss，但 Attention rank、MLP rank、QK 乘积 rank、attention entropy、激活尺度和 branch-output 尺度都不同。每个 panel 都是终点配对诊断。*
+
+前向计算也留下了差异：从普通 WD 到非对称衰减，归一化 attention entropy 从 $0.5814$ 降到 $0.5672$，平均最大注意力概率从 $0.2408$ 升到 $0.2671$；Q activation RMS 从 $1.2088$ 升到 $1.3064$，MLP output RMS 则从 $2.0829$ 降到 $1.7333$。近似相同的 loss，容纳了不同的信息分配与内部尺度。
+
+![相同 loss 终点的归一化谱](/blog/rethinking-weight-decay/figures/asymmetric_case_study_article/asymmetric_same_loss_normalized_spectra.png)
+
+*图 12：同一配对的归一化奇异值谱。Attention 与 MLP 的形状差异在接近的 validation loss 下仍然保留；绝对尺度由前表的范数指标补充。*
+
+这组结果把 $\mathcal{S}_p$ WD 的另一个用途呈现出来：**在接近的预训练 loss 下，探索不同的内部谱结构。** 这个配对同时改变了幂次与模块系数，尚不能把差异全部归因于幂次，也不能说明哪种结构更好。但它留下了值得继续追问的问题：这些结构会怎样影响迁移、微调或鲁棒性？预训练 loss 相近，正好为这样的比较提供了起点。
+
+## 6. 相关扩展：把谱投影放进衰减分支
+
+幂次 $p$ 让收缩随模态大小连续变化，还可以再加一个选择：只衰减某一段谱。最近一篇工作通过平移后的 Gram 矩阵与对称 matrix sign，选出动量中阈值两侧的奇异子空间 [@goyal2026spectrallytargetedmuon]。把投影对象从动量换成权重，就能构造按谱带选择的衰减，同时保留任务优化器的更新规则。
+
+**从阈值到投影。** 先考虑 $W\in\mathbb R^{m\times n}$、$m\ge n$ 的情形，假设没有奇异值恰好落在阈值 $\tau$ 上。令 $G=W^\top W\in\mathbb R^{n\times n}$，并构造
+
+$$
+A=G-\tau^2I_n,
+\qquad J=\operatorname{msign}(A),
+\qquad P_{\mathrm{top}}=\frac{I_n+J}{2},\quad
+P_{\mathrm{bot}}=\frac{I_n-J}{2}.
+$$
+
+$\tau>0$ 是奇异值阈值，$I_n$ 是单位矩阵。对称 matrix sign 保留特征向量，只把特征值变成其符号：若 $A=Z\operatorname{diag}(\xi_i)Z^\top$，则 $\operatorname{msign}(A)=Z\operatorname{diag}(\operatorname{sign}\xi_i)Z^\top$。这里 $\xi_i=\sigma_i(W)^2-\tau^2$，所以正、负特征值恰好区分阈值上下的模态；$P_{\mathrm{top}}$ 与 $P_{\mathrm{bot}}$ 就选出了对应子空间。
+
+原论文将这套构造用于动量矩阵 $M$，由 $M^\top M-\tau^2I$ 得到 $P_{\mathrm{top}}(M),P_{\mathrm{bot}}(M)$。记 $Q_M=\operatorname{polar}(M)$，其两种任务方向为
+
+$$
+D_{\mathrm{top}}=Q_MP_{\mathrm{top}}(M)+MP_{\mathrm{bot}}(M),
+\qquad D_{\mathrm{bot}}=MP_{\mathrm{top}}(M)+Q_MP_{\mathrm{bot}}(M).
+$$
+
+选中子空间用 polar 方向，其余子空间保留原始动量。对于衰减，我们也可以选择性地施加 $S_p$，让另一半谱沿用普通 WD：
+
+$$
+T_{\tau,p}^{\mathrm{top}}(W)=S_p(W)P_{\mathrm{top}}(W)+W P_{\mathrm{bot}}(W),\\
+T_{\tau,p}^{\mathrm{bot}}(W)=W P_{\mathrm{top}}(W)+S_p(W)P_{\mathrm{bot}}(W).
+$$
+
+或者对另一半谱不做标准权重衰减：
+
+$$
+T_{\tau,p}^{\mathrm{top}}(W)=S_p(W)P_{\mathrm{top}}(W),\qquad
+T_{\tau,p}^{\mathrm{bot}}(W)=S_p(W)P_{\mathrm{bot}}(W).
+$$
+
+**不用 SVD 计算带符号的投影。** 将对称 shifted 矩阵归一化为 $Z_0=A/(\lVert A\rVert_F+\varepsilon)$，再使用收敛的五次 Newton–Schulz 多项式
+
+$$
+C_j=Z_j^2,\qquad
+Z_{j+1}=Z_j\left(3I-\frac{16}{5}C_j+\frac65 C_j^2\right).
+$$
+
+这个奇多项式保留特征值的正负号，使远离零的模态趋近 $\pm1$。计算中可先形成 $C_j$ 再复用 $C_j^2$。阈值附近的特征值接近零，收敛会更慢；原论文因此在 NanoGPT 中为两次 sign 调用都使用 20 次 FP32 迭代 [@goyal2026spectrallytargetedmuon]。有限迭代给出的是近似投影，其精度需要根据阈值附近的谱间隔选择。
+
+**增加了哪些衰减自由度？** 奇异方向固定、且步长足够小以保持模态非负时，只选择谱头的衰减满足
+
+$$
+\sigma_i^+=\sigma_i-\eta_t\lambda_{\tau,p}\sigma_i^p\mathbf1\{\sigma_i>\tau\}.
+$$
+
+在衰减主导的连续时间近似下，对应 $\dot\sigma_i=-\lambda_{\tau,p}\sigma_i^p\mathbf1\{\sigma_i>\tau\}$。$\tau$ 选择参与的模态，$p$ 决定其收缩规律，$\lambda_{\tau,p}$ 控制强度。每步根据当前 $W$ 重新计算投影，也可以给两个子空间分别设置幂次与系数：
+
+$$
+W_{t+1}=W_t-\eta_t\left[
+\alpha D_t+\lambda_{\mathrm{top}}S_{p_{\mathrm{top}}}(W_t)P_{\mathrm{top}}
++\lambda_{\mathrm{bot}}S_{p_{\mathrm{bot}}}(W_t)P_{\mathrm{bot}}
+\right].
+$$
+
+任一系数设为零，就只衰减一个谱带；两侧都取 $p=1$、系数相等，则恢复普通 WD。
+
+这给衰减增加了“作用在哪段谱上”的自由度。它的吸引力在于，可以让谱头和谱尾承担不同的正则化角色。
+
+## 7. 结语
+
+从普通 WD 出发，最直接的变化，是把统一缩放扩展成可选择的谱偏好。$\mathcal{S}_p$ WD 用一个幂次规定不同模态如何收缩：$p=1$ 保持孤立衰减中的谱比例，$p<1$ 相对压低弱模态，$p>1$ 相对压低强模态。可解线性模型和八层 Transformer 表明，这种偏好能够留下清晰的谱形状变化。
+
+两个 case study 则把这个自由度放回任务中。Head-wise Muon 的比较说明，谱正则化可以在既定更新规则上参与调节。非对称衰减进一步表明，几乎相同的预训练 loss 可以对应不同的权重谱、激活统计与内部尺度。
+
+因此，$\mathcal{S}_p$ WD 值得研究的地方，是让权重谱成为可以明确施加偏好、也可以实测回应的正则化对象。幂次、系数、模块分配，以及进一步的谱带选择，提供了不同层次的调节方式。哪些偏好能在特定任务上带来更好的学习、迁移或泛化，是接下来真正有意思的问题。 ORCA 在预训练中的阶段性谱正则化 [@liu2026orca]，以及 S²D 面向量化的谱衰减 [@chavan2026s2d]，也提供了值得探索的应用方向。
+
+> **调 weight decay 时，除了问“衰减多少”，还可以问“希望怎样分配模态之间的收缩”。谱塑形给出一种手段，任务表现决定这种选择是否有价值。**

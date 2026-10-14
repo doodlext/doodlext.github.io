@@ -119,7 +119,12 @@ const { tableOfContentAutoCollapse = false } = Astro.props as Props;
       const li = document.createElement("li");
       const a = document.createElement("a");
       a.href = "#" + h.id;
-      a.textContent = h.textContent;
+      // Reuse rendered math once; textContent includes MathML, TeX, and HTML copies.
+      const source = h.querySelector(":scope > a") || h;
+      const label = source.cloneNode(true);
+      label.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+      label.querySelectorAll("a").forEach((link) => link.replaceWith(...link.childNodes));
+      a.append(...label.childNodes);
       a.target = "_self";
       li.appendChild(a);
       // Ajouter un index unique à chaque heading pour le tracking

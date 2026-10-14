@@ -13,6 +13,7 @@ interface Props {
   modified?: string;
   tags?: string[];
   image?: string; // Preferred absolute URL
+  locale?: string;
 }
 
 const {
@@ -23,6 +24,7 @@ const {
   modified,
   tags = [],
   image,
+  locale = "en_US",
 } = Astro.props as Props;
 
 const url = Astro.url?.toString?.() ?? "";
@@ -80,7 +82,7 @@ const jsonLd = {
 <meta property="og:title" content={title} />
 {description && <meta property="og:description" content={description} />}
 <meta property="og:url" content={url} />
-<meta property="og:locale" content="en_US" />
+<meta property="og:locale" content={locale} />
 <meta property="og:site_name" content={SITE_TITLE} />
 {ogImage && <meta property="og:image" content={ogImage} />}
 {ogImage && <meta property="og:image:alt" content={title} />}

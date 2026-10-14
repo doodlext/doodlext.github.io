@@ -8,6 +8,8 @@ export type SiteArticleEntry = {
   modified?: string;
   displayDate?: string;
   description?: string;
+  /** Hide translations or other supporting posts from index-style listings. */
+  hiddenFromIndex?: boolean;
   /** Trimmed strings from frontmatter `tags`. */
   tags: string[];
   /** From frontmatter `category` or first entry of `categories`. */
@@ -75,6 +77,7 @@ export async function parseArticleGlob(
       const modified = modifiedBySlug[slug] ?? frontmatterModified ?? published;
       const description =
         typeof fm.description === "string" ? fm.description : undefined;
+      const hiddenFromIndex = fm.hiddenFromIndex === true;
       const tags = normalizeTags(fm.tags);
       const category = normalizeCategory(fm.category ?? fm.categories);
       return {
@@ -85,11 +88,12 @@ export async function parseArticleGlob(
         modified,
         displayDate: formatDisplayDate(modified ?? published) ?? modified ?? published,
         description,
+        hiddenFromIndex,
         tags,
         category,
       };
     },
-  );
+  ).filter((article) => !article.hiddenFromIndex);
 
   articles.sort((a, b) => {
     const ta = Date.parse(a.modified ?? a.published ?? "") || 0;

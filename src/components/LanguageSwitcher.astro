@@ -1,0 +1,72 @@
+---
+interface Props {
+  language?: string;
+  translationUrl?: string;
+  translationLabel?: string;
+}
+
+const {
+  language = "en",
+  translationUrl,
+  translationLabel,
+} = Astro.props as Props;
+
+const currentLabel = language.toLowerCase().startsWith("zh") ? "中文" : "English";
+const targetLabel = translationLabel || (currentLabel === "中文" ? "English" : "中文");
+---
+
+{translationUrl && (
+  <nav class="language-switcher" aria-label="Article language">
+    <span class="language-switcher__label">Language</span>
+    <span class="language-switcher__current" aria-current="page">{currentLabel}</span>
+    <a class="language-switcher__link" href={translationUrl}>{targetLabel}</a>
+  </nav>
+)}
+
+<style>
+  .language-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0 0 1.35rem;
+    padding: 0.2rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    color: var(--muted-color);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+
+  .language-switcher__label {
+    padding: 0.45rem 0.5rem 0.45rem 0.65rem;
+    letter-spacing: 0.01em;
+  }
+
+  .language-switcher__current,
+  .language-switcher__link {
+    padding: 0.45rem 0.65rem;
+    border-radius: 999px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .language-switcher__current {
+    background: var(--text-color);
+    color: var(--page-bg);
+  }
+
+  .language-switcher__link {
+    color: var(--text-color);
+  }
+
+  .language-switcher__link:hover {
+    background: var(--surface-bg);
+    color: var(--primary-color);
+  }
+
+  @media (max-width: 38rem) {
+    .language-switcher {
+      margin-bottom: 1rem;
+    }
+  }
+</style>

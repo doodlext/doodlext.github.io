@@ -6,11 +6,13 @@ import Header from "../components/Header.astro";
 import Seo from "../components/Seo.astro";
 import TableOfContents from "../components/TableOfContents.astro";
 import HtmlEmbed from "../components/HtmlEmbed.astro";
+import LanguageSwitcher from "../components/LanguageSwitcher.astro";
 import {
   SITE_AUTHOR,
   SITE_AUTHOR_URL,
   SITE_LICENSE,
   SITE_SOCIAL_IMAGE,
+  SITE_URL,
 } from "../consts";
 import "katex/dist/katex.min.css";
 import "../styles/global.css";
@@ -145,6 +147,18 @@ const modified =
   (articleFM as any)?.lastmod ??
   published;
 const template: string = (articleFM as any)?.template ?? "article";
+const language =
+  typeof (articleFM as any)?.language === "string"
+    ? String((articleFM as any).language)
+    : "en";
+const translationUrl =
+  typeof (articleFM as any)?.translationUrl === "string"
+    ? String((articleFM as any).translationUrl)
+    : undefined;
+const translationLabel =
+  typeof (articleFM as any)?.translationLabel === "string"
+    ? String((articleFM as any).translationLabel)
+    : undefined;
 const hasBanner = Object.keys(import.meta.glob("../assets/embeds/**/banner.html")).length > 0;
 const tags = articleFM?.tags ?? [];
 // Prefer seoThumbImage from frontmatter if provided
@@ -184,11 +198,26 @@ const keyTitle = titleFlat
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, "_")
   .replace(/^_|_$/g, "");
-const bibKey = `${keyAuthor}${year ?? ""}_${keyTitle}`;
+const bibKey = String(
+  (articleFM as any)?.citationKey ??
+    `${keyAuthor}${year ?? ""}_${keyTitle}`,
+);
 const doi = (ArticleMod as any)?.frontmatter?.doi
   ? String((ArticleMod as any).frontmatter.doi)
   : undefined;
-const bibtex = `@misc{${bibKey},\n  title={${titleFlat}},\n  author={${authorsBib}},\n  ${year ? `year={${year}},\n  ` : ""}${doi ? `doi={${doi}}` : ""}\n}`;
+const pageUrl = `${SITE_URL.replace(/\/$/, "")}${Astro.url.pathname}`;
+const bibtex = [
+  `@misc{${bibKey},`,
+  `  title={${titleFlat}},`,
+  `  author={${authorsBib}},`,
+  year ? `  year={${year}},` : "",
+  `  howpublished={Personal research blog},`,
+  `  url={${pageUrl}}${doi ? "," : ""}`,
+  doi ? `  doi={${doi}}` : "",
+  "}",
+]
+  .filter(Boolean)
+  .join("\n");
 const envCollapse = false;
 const tableOfContentAutoCollapse = Boolean(
   (articleFM as any)?.tableOfContentAutoCollapse ??
@@ -212,7 +241,7 @@ const links: Array<{ label: string; url: string; icon?: string }> =
 ---
 
 <html
-  lang="en"
+  lang={language}
   data-theme="light"
   data-template={template}
   data-toc-auto-collapse={tableOfContentAutoCollapse ? "1" : "0"}
@@ -230,6 +259,7 @@ const links: Array<{ label: string; url: string; icon?: string }> =
       modified={modified}
       tags={tags}
       image={imageAbs}
+      locale={language.toLowerCase().startsWith("zh") ? "zh_CN" : "en_US"}
     />
     <script is:inline>
       (() => {
@@ -410,6 +440,11 @@ const links: Array<{ label: string; url: string; icon?: string }> =
         tableOfContentAutoCollapse={tableOfContentAutoCollapse}
       />
       <main class="article-prose">
+        <LanguageSwitcher
+          language={language}
+          translationUrl={translationUrl}
+          translationLabel={translationLabel}
+        />
         <Article />
       </main>
     </section>
