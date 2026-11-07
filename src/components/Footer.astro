@@ -69,6 +69,11 @@ const isPaper = template === "paper";
     const target = footer.querySelector(".references-block");
     if (!target) return;
 
+    const articleAside = document.querySelector("[data-article-aside]");
+    const articleAsideDynamic = articleAside?.querySelector(
+      ".article-aside__dynamic",
+    );
+
     const contentRoot =
       document.querySelector("section.content-grid main") ||
       document.querySelector("main") ||
@@ -128,6 +133,25 @@ const isPaper = template === "paper";
       // KaTeX is already rendered at build-time, so we just need to preserve the HTML
       target.appendChild(element);
 
+      return true;
+    };
+
+    const moveIntoArticleAside = (element, headingText) => {
+      if (!element || !articleAsideDynamic) return false;
+
+      const firstHeading = element.querySelector(
+        ":scope > h1, :scope > h2, :scope > h3, :scope > .footer-heading",
+      );
+      if (firstHeading) firstHeading.remove();
+
+      const heading = document.createElement("p");
+      heading.className = "footer-heading";
+      heading.setAttribute("role", "heading");
+      heading.setAttribute("aria-level", "2");
+      heading.textContent = headingText;
+      articleAsideDynamic.appendChild(heading);
+      articleAsideDynamic.appendChild(element);
+      articleAside.dataset.empty = "false";
       return true;
     };
 
@@ -303,7 +327,9 @@ const isPaper = template === "paper";
         movedRefs = true;
       }
 
-      const movedNotes = moveIntoFooter(footnotesEl, "Footnotes");
+      const movedNotes = articleAside
+        ? moveIntoArticleAside(footnotesEl, "Footnotes")
+        : moveIntoFooter(footnotesEl, "Footnotes");
 
       if (movedRefs || movedNotes) {
         footer.dataset.processed = "true";

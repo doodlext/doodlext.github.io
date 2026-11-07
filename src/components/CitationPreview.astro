@@ -1,0 +1,302 @@
+<!--
+  Citation previews are intentionally rendered at the article level rather than
+  in the bibliography. The rehype citation pipeline marks each in-text link
+  with data-ref-id, while Footer moves the bibliography after the article has
+  mounted. The small observer below waits for that move and then indexes the
+  final reference list.
+-->
+<script is:inline>
+  (() => {
+    if (window.__citationPreviewInitialized) return;
+    window.__citationPreviewInitialized = true;
+
+    const state = {
+      activeAnchor: null,
+      hideTimer: 0,
+      index: new Map(),
+      touchOpen: false,
+    };
+
+    const isSmallScreen = () =>
+      window.matchMedia?.("(max-width: 700px), (pointer: coarse)").matches ??
+      window.innerWidth <= 700;
+
+    const getPopup = () => {
+      let popup = document.getElementById("citation-preview");
+      if (popup) return popup;
+
+      popup = document.createElement("aside");
+      popup.id = "citation-preview";
+      popup.className = "citation-preview";
+      popup.setAttribute("role", "dialog");
+      popup.setAttribute("aria-label", "Citation preview");
+      popup.setAttribute("aria-hidden", "true");
+      popup.hidden = true;
+      popup.innerHTML =
+        '<div class="citation-preview__header">' +
+        '<span class="citation-preview__label">Reference</span>' +
+        '<button type="button" class="citation-preview__close" aria-label="Close citation preview">' +
+        '<span aria-hidden="true">×</span>' +
+        "</button>" +
+        "</div>" +
+        '<div class="citation-preview__body"></div>';
+      document.body.appendChild(popup);
+
+      popup.addEventListener("mouseenter", () => clearTimeout(state.hideTimer));
+      popup.addEventListener("mouseleave", () => scheduleHide());
+      popup
+        .querySelector(".citation-preview__close")
+        ?.addEventListener("click", () => {
+          const anchor = state.activeAnchor;
+          hidePreview(true);
+          anchor?.focus();
+        });
+      return popup;
+    };
+
+    const scheduleHide = (delay = 130) => {
+      clearTimeout(state.hideTimer);
+      state.hideTimer = window.setTimeout(() => hidePreview(), delay);
+    };
+
+    const getReferenceRoot = () =>
+      document.querySelector("footer.footer .references-block") ||
+      document.querySelector("#references, #refs, .references, .bibliography");
+
+    const indexReferences = () => {
+      const root = getReferenceRoot();
+      if (!root) return false;
+      const next = new Map();
+      root.querySelectorAll("li[id], .csl-entry[id]").forEach((item) => {
+        const id = item.id;
+        if (!id) return;
+        const clone = item.cloneNode(true);
+        clone
+          .querySelectorAll?.(".backrefs, .footnote-backref, [data-footnote-backref]")
+          .forEach((node) => node.remove());
+        next.set(id, clone);
+      });
+      if (next.size) state.index = next;
+      return next.size > 0;
+    };
+
+    const getCitationAnchors = () =>
+      document.querySelectorAll(".article-prose a[data-ref-id]");
+
+    const renderReference = (anchor) => {
+      const refId = anchor?.getAttribute("data-ref-id");
+      if (!refId) return null;
+      const item = state.index.get(refId);
+      if (!item) return null;
+      const body = document.createElement("div");
+      body.className = "citation-preview__reference";
+      body.appendChild(item.cloneNode(true));
+      // A preview should not contain an ordered-list marker or back-reference.
+      const li = body.firstElementChild;
+      if (li) {
+        li.removeAttribute("id");
+        li.classList.remove("csl-entry");
+      }
+      return body;
+    };
+
+    const placePopup = (anchor, popup) => {
+      const rect = anchor.getBoundingClientRect();
+      const margin = 12;
+      const viewportWidth = document.documentElement.clientWidth;
+      const popupWidth = Math.min(390, viewportWidth - margin * 2);
+      popup.style.width = `${popupWidth}px`;
+      // Measure after setting width, while still hidden from assistive tech.
+      popup.hidden = false;
+      popup.style.visibility = "hidden";
+      const popupRect = popup.getBoundingClientRect();
+      let left = rect.left;
+      if (left + popupRect.width > viewportWidth - margin) {
+        left = viewportWidth - margin - popupRect.width;
+      }
+      left = Math.max(margin, left);
+      const roomBelow = window.innerHeight - rect.bottom - margin;
+      const roomAbove = rect.top - margin;
+      let top = rect.bottom + 8;
+      if (popupRect.height > roomBelow && roomAbove > roomBelow) {
+        top = rect.top - popupRect.height - 8;
+      }
+      top = Math.max(margin, Math.min(top, window.innerHeight - popupRect.height - margin));
+      popup.style.left = `${left}px`;
+      popup.style.top = `${top}px`;
+      popup.style.visibility = "visible";
+    };
+
+    const showPreview = (anchor) => {
+      if (!anchor || !state.index.size) return false;
+      const content = renderReference(anchor);
+      if (!content) return false;
+      clearTimeout(state.hideTimer);
+      const popup = getPopup();
+      const body = popup.querySelector(".citation-preview__body");
+      if (!body) return false;
+      body.replaceChildren(content);
+      state.activeAnchor = anchor;
+      anchor.setAttribute("aria-describedby", popup.id);
+      anchor.setAttribute("aria-expanded", "true");
+      popup.setAttribute("aria-hidden", "false");
+      placePopup(anchor, popup);
+      popup.classList.add("is-visible");
+      return true;
+    };
+
+    const hidePreview = (force = false) => {
+      if (!state.activeAnchor) return;
+      if (!force && state.touchOpen) return;
+      const popup = getPopup();
+      state.activeAnchor.removeAttribute("aria-describedby");
+      state.activeAnchor.setAttribute("aria-expanded", "false");
+      popup.classList.remove("is-visible");
+      popup.setAttribute("aria-hidden", "true");
+      popup.hidden = true;
+      state.activeAnchor = null;
+      state.touchOpen = false;
+    };
+
+    const bindAnchors = () => {
+      getCitationAnchors().forEach((anchor) => {
+        if (anchor.dataset.citationPreviewBound === "true") return;
+        anchor.dataset.citationPreviewBound = "true";
+        anchor.setAttribute("aria-haspopup", "dialog");
+        anchor.setAttribute("aria-expanded", "false");
+        anchor.addEventListener("mouseenter", () => {
+          if (!isSmallScreen()) showPreview(anchor);
+        });
+        anchor.addEventListener("mouseleave", () => {
+          if (!isSmallScreen()) scheduleHide();
+        });
+        anchor.addEventListener("focus", () => showPreview(anchor));
+        anchor.addEventListener("blur", (event) => {
+          const next = event.relatedTarget;
+          const popup = document.getElementById("citation-preview");
+          if (!popup?.contains(next)) scheduleHide();
+        });
+        anchor.addEventListener("click", (event) => {
+          if (!isSmallScreen()) return;
+          // On touch, the first tap opens the preview. A second tap follows the
+          // original citation URL, so the link remains useful on mobile.
+          if (state.activeAnchor !== anchor || !state.touchOpen) {
+            event.preventDefault();
+            state.touchOpen = true;
+            showPreview(anchor);
+          }
+        });
+      });
+    };
+
+    const refresh = () => {
+      indexReferences();
+      bindAnchors();
+    };
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      const popup = document.getElementById("citation-preview");
+      if (!state.activeAnchor || popup?.contains(target) || state.activeAnchor.contains(target)) return;
+      hidePreview(true);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !state.activeAnchor) return;
+      const anchor = state.activeAnchor;
+      hidePreview(true);
+      anchor.focus();
+    });
+    window.addEventListener("resize", () => {
+      if (state.activeAnchor) placePopup(state.activeAnchor, getPopup());
+    });
+    window.addEventListener("scroll", () => {
+      if (state.activeAnchor) placePopup(state.activeAnchor, getPopup());
+    }, { passive: true });
+
+    refresh();
+    const observer = new MutationObserver(() => refresh());
+    [
+      document.querySelector(".article-prose"),
+      document.querySelector("footer.footer .references-block"),
+    ]
+      .filter(Boolean)
+      .forEach((root) => observer.observe(root, { childList: true, subtree: true }));
+    window.setTimeout(refresh, 100);
+    window.setTimeout(refresh, 450);
+  })();
+</script>
+
+<style is:global>
+  .citation-preview {
+    position: fixed;
+    z-index: 2000;
+    max-width: calc(100vw - 24px);
+    max-height: min(22rem, calc(100vh - 24px));
+    overflow: auto;
+    padding: 0.75rem 0.9rem 0.85rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.55rem;
+    background: var(--page-bg);
+    color: var(--text-color);
+    box-shadow: 0 0.75rem 2rem color-mix(in srgb, #000 18%, transparent);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+
+  .citation-preview[hidden] { display: none; }
+  .citation-preview.is-visible { opacity: 1; transform: translateY(0); }
+  .citation-preview__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.4rem;
+    color: var(--muted-color);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .citation-preview__close {
+    display: inline-grid;
+    width: 1.45rem;
+    height: 1.45rem;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted-color);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .citation-preview__close:hover,
+  .citation-preview__close:focus-visible { color: var(--text-color); border-color: var(--primary-color); }
+  .citation-preview__reference > li {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .citation-preview__reference a { overflow-wrap: anywhere; }
+  .citation-preview__reference .csl-left-margin { display: none; }
+
+  @media (max-width: 700px) {
+    .citation-preview {
+      width: calc(100vw - 24px) !important;
+      max-height: min(18rem, calc(100vh - 24px));
+      font-size: 0.9rem;
+    }
+  }
+
+  [data-theme="dark"] .citation-preview {
+    box-shadow: 0 0.75rem 2rem color-mix(in srgb, #000 45%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .citation-preview { transition: none; }
+  }
+</style>

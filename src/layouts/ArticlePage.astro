@@ -5,8 +5,10 @@ import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import Seo from "../components/Seo.astro";
 import TableOfContents from "../components/TableOfContents.astro";
+import ArticleAside from "../components/ArticleAside.astro";
 import HtmlEmbed from "../components/HtmlEmbed.astro";
 import LanguageSwitcher from "../components/LanguageSwitcher.astro";
+import CitationPreview from "../components/CitationPreview.astro";
 import {
   SITE_AUTHOR,
   SITE_AUTHOR_URL,
@@ -238,6 +240,14 @@ const links: Array<{ label: string; url: string; icon?: string }> =
     url: l.url ?? l.href ?? l.link ?? "#",
     icon: l.icon,
   }));
+
+// Optional notes shown in the right reading rail. A note may be a string or
+// an object such as { title: "Reading note", text: "..." } in frontmatter.
+const articleAsideNotes =
+  (articleFM as any)?.aside ??
+  (articleFM as any)?.sideNotes ??
+  (articleFM as any)?.sidebar ??
+  undefined;
 ---
 
 <html
@@ -447,6 +457,9 @@ const links: Array<{ label: string; url: string; icon?: string }> =
         />
         <Article />
       </main>
+      {template !== "paper" ? (
+        <ArticleAside notes={articleAsideNotes} language={language} />
+      ) : null}
     </section>
 
     <Footer
@@ -456,6 +469,8 @@ const links: Array<{ label: string; url: string; icon?: string }> =
       doi={doi}
       template={template}
     />
+
+    <CitationPreview />
 
     <script>
       // Open external links in a new tab; keep internal anchors in-page

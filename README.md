@@ -21,10 +21,10 @@ Personal information in this repository is limited to the public introduction, c
 
 | Content | Edit this file |
 | --- | --- |
-| Name, site title, metadata description, email, and Scholar link | `src/consts.ts` |
+| Name, site title, metadata description, email, Scholar, and X links | `src/consts.ts` |
 | Production URL (normally supplied automatically by GitHub Actions) | `site.config.mjs` |
 | Avatar | `public/avatar.png` |
-| Homepage introduction, research interests, and email/Scholar icons | `src/pages/index.astro` |
+| Homepage introduction, research interests, and email/Scholar/X icons | `src/pages/index.astro` |
 | Homepage academic service | `src/data/services.ts` |
 | Publications list, displayed on the separate Publications page | `src/data/publications.ts` |
 | Homepage News & Updates | `src/data/site-news.ts` |
@@ -42,6 +42,14 @@ Posts support formulas, code blocks, citations, and the reusable `Note` componen
 The first research post is available at `/blog/rethinking-weight-decay/`, with a Chinese translation at `/blog/rethinking-weight-decay-zh/`. Each version declares `language`, `translationUrl`, and `translationLabel` in its frontmatter; the Chinese translation also uses `hiddenFromIndex: true` so Blog, Browse, RSS, and the sitemap list the English post only. Use the same pattern for future translations.
 
 For citations, write `[@key]` in the MDX and add the matching entry to `src/content/bibliography.bib`. The article footer then generates linked author-year citations, the reference list, backreferences, and a copyable BibTeX record automatically. Set `citationKey` in frontmatter when a stable citation key is preferred.
+
+In-text citations show a small reference preview on hover or keyboard focus; the citation still follows its DOI or source link when activated. Footnotes are placed in the right reading rail on wide article pages and return to the normal reading flow on narrow screens. Articles show a short reading hint by default; add custom notes with `aside` (or `sideNotes`/`sidebar`), or use `aside: []` to hide the hint:
+
+```yaml
+aside:
+  - title: Reading note
+    text: Citations open a quick preview; full references remain at the end of the article.
+```
 
 Use `[@key1; @key2]` for one grouped parenthetical citation, or `@key` for a narrative citation such as “Author (year).” The formatter supplies names and parentheses; do not add another pair around `[@key]` or manually repeat the author name. Put equation and theorem numbers in the surrounding prose. The weight-decay post uses LaTeX pseudocode images: edit the `.tex` sources under `public/blog/rethinking-weight-decay/algorithms/`, compile them, and render the matching `.png` files at 450 dpi or higher. Keep intermediate PDFs and build files in ignored `reference/`; both language versions share the images and link to the editable source. For other posts, the optional `src/components/Algorithm.astro` wrapper supports numbered MDX steps and LaTeX math.
 
@@ -70,7 +78,7 @@ Conference Papers appear before Preprints; each group is sorted by `date` from n
 
 The visible email address is stored in an obfuscated form in `SITE_EMAIL_DISPLAY`. `SITE_EMAIL_HREF` derives a standard `mailto:` link from it, so clicking Email opens the visitor's configured mail client.
 
-The homepage uses a left profile sidebar (avatar, name, affiliation, Email, Google Scholar) and a wider introduction column on the right. It switches to a single column on small screens. The Email and Google Scholar icons are direct links. The introduction, research interests, News & Updates, and Services live on the homepage; Publications and Blog have their own pages. There is no separate About page or stored private profile timeline.
+The homepage uses a left profile sidebar (avatar, name, affiliation, Email, Google Scholar, X) and a wider introduction column on the right. It switches to a single column on small screens. The Email, Google Scholar, and X icons are direct links. The introduction, research interests, News & Updates, and Services live on the homepage; Publications and Blog have their own pages. There is no separate About page or stored private profile timeline.
 
 ### Adjusting the homepage layout and updates
 

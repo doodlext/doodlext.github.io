@@ -421,9 +421,12 @@ export default function rehypeReferencesAndFootnotes() {
     if (refIdToCitationAnchors.size > 0) {
       for (const [id, anchors] of refIdToCitationAnchors.entries()) {
         const ext = refIdToExternalHref.get(id);
-        if (!ext) continue;
         for (const a of anchors) {
+          // Keep the reference id even when a BibTeX entry has no DOI/URL.
+          // The article-level citation preview can still show the full entry;
+          // only the external-link behavior depends on an available URL.
           setAttr(a, 'data-ref-id', id);
+          if (!ext) continue;
           setAttr(a, 'href', ext);
           const existingTarget = getAttr(a, 'target');
           if (!existingTarget) setAttr(a, 'target', '_blank');

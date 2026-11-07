@@ -25,6 +25,9 @@ export const SITE_EMAIL_HREF = `mailto:${SITE_EMAIL_DISPLAY.replace(" [at] ", "@
 /** Google Scholar profile. */
 export const SITE_SCHOLAR_URL = "https://scholar.google.com/citations?user=iYaJ1pkAAAAJ&hl=en";
 
+/** X profile. */
+export const SITE_X_URL = "https://x.com/doodlext25";
+
 /** Google Search Console verification token. */
 export const SITE_GOOGLE_SITE_VERIFICATION = "";
 

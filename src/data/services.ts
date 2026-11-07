@@ -1,6 +1,6 @@
 /** Public academic service entries rendered on the homepage. */
 export const ACADEMIC_SERVICES = [
-  { role: "Conference reviewer", venue: "ICLR" },
+  { role: "Conference reviewer", venue: "ICLR, ICML" },
   {
     role: "Journal reviewer",
     venue: "IEEE TPAMI",

@@ -1,0 +1,143 @@
+---
+interface AsideNote {
+  title?: string;
+  text?: string;
+  content?: string;
+}
+
+interface Props {
+  notes?: unknown;
+  language?: string;
+}
+
+const { notes, language = "en" } = Astro.props as Props;
+
+const defaultNote: AsideNote = language.toLowerCase().startsWith("zh")
+  ? {
+      title: "阅读提示",
+      text: "将鼠标移到引用上可快速预览来源。宽屏时脚注显示在这里，完整参考文献仍在文末。",
+    }
+  : {
+      title: "Reading note",
+      text: "Hover a citation for a quick source preview. Footnotes appear here on wide screens; full references remain at the end.",
+    };
+
+const normalizedNotes: AsideNote[] = (() => {
+  // An omitted aside uses a small built-in reading hint so the rail has a
+  // useful default. Set `aside: []` to intentionally keep it empty.
+  if (notes == null) return [defaultNote];
+  const input = Array.isArray(notes) ? notes : notes ? [notes] : [];
+  return input
+    .map((note): AsideNote | null => {
+      if (typeof note === "string") {
+        return { text: note };
+      }
+      if (!note || typeof note !== "object") return null;
+      const value = note as Record<string, unknown>;
+      const title = value.title ?? value.label;
+      const text = value.text ?? value.content ?? value.body;
+      if (text == null || String(text).trim().length === 0) return null;
+      return {
+        title: title == null ? undefined : String(title),
+        text: String(text),
+      };
+    })
+    .filter((note): note is AsideNote => note !== null);
+})();
+
+const hasStaticNotes = normalizedNotes.length > 0;
+---
+
+<aside
+  class="article-aside"
+  data-article-aside
+  data-empty={hasStaticNotes ? "false" : "true"}
+  aria-label="Article notes"
+>
+  {normalizedNotes.map((note) => (
+    <section class="article-aside__card">
+      {note.title ? <h2>{note.title}</h2> : null}
+      <p>{note.text}</p>
+    </section>
+  ))}
+  <div class="article-aside__dynamic"></div>
+</aside>
+
+<style>
+  .article-aside {
+    grid-column: 3;
+    min-width: 0;
+    align-self: start;
+    position: sticky;
+    top: 2rem;
+    color: var(--muted-color);
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+
+  .article-aside[data-empty="true"] {
+    min-height: 0;
+  }
+
+  .article-aside__card {
+    margin: 0 0 1.5rem;
+    padding: 0.2rem 0 0.2rem 1rem;
+    border-left: 3px solid var(--border-color);
+  }
+
+  .article-aside__card h2,
+  .article-aside__dynamic .footer-heading {
+    margin: 0 0 0.4rem;
+    padding: 0;
+    border: 0;
+    color: var(--text-color);
+    font-size: 0.875rem;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  .article-aside__card p {
+    margin: 0;
+  }
+
+  .article-aside__dynamic {
+    min-width: 0;
+  }
+
+  .article-aside__dynamic .footer-heading {
+    margin-top: 0;
+  }
+
+  .article-aside__dynamic .footnotes {
+    margin: 0;
+  }
+
+  .article-aside__dynamic .footnotes ol {
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+
+  .article-aside__dynamic .footnotes li {
+    margin: 0 0 0.9rem;
+  }
+
+  .article-aside__dynamic .footnotes p {
+    margin: 0;
+  }
+
+  .article-aside__dynamic a {
+    color: var(--primary-color);
+  }
+
+  @media (max-width: 1100px) {
+    .article-aside {
+      grid-column: 1;
+      position: static;
+      margin-top: 1.5rem;
+    }
+
+    .article-aside[data-empty="true"] {
+      display: none;
+    }
+  }
+</style>

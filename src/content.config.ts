@@ -39,6 +39,9 @@ const articles = defineCollection({
         pdfProOnly: z.boolean().optional(),
         showPdf: z.boolean().optional(),
         seoThumbImage: z.string().optional(),
+        aside: z.any().optional(),
+        sideNotes: z.any().optional(),
+        sidebar: z.any().optional(),
       })
       .passthrough(),
 });
