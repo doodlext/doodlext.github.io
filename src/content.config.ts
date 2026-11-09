@@ -22,6 +22,8 @@ const articles = defineCollection({
         title: z.string(),
         subtitle: z.string().optional(),
         description: z.string().optional(),
+        previewImage: z.string().optional(),
+        previewImageAlt: z.string().optional(),
         published: z.string().optional(),
         modified: z.string().optional(),
         language: z.string().optional(),

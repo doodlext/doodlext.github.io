@@ -1,0 +1,43 @@
+---
+import { browseCategoryHref, browseTagHref } from "../utils/browse-links";
+import type { SiteArticleEntry } from "../utils/site-articles";
+
+interface Props {
+  article: SiteArticleEntry;
+  browse?: boolean;
+}
+
+const { article, browse = false } = Astro.props;
+---
+<li
+  class:list={["article-index__item", { "article-index__item--preview": article.previewImage }]}
+  data-browse-slug={browse ? article.slug : undefined}
+>
+  {article.previewImage && (
+    <a class="article-index__preview" href={article.url} aria-label={`Read ${article.title}`} tabindex="-1">
+      <img
+        src={article.previewImage}
+        alt={article.previewImageAlt ?? ""}
+        width="640"
+        height="320"
+        loading="lazy"
+        decoding="async"
+      />
+    </a>
+  )}
+  <div class="article-index__body">
+    {article.category && (
+      <a class="article-index__category" href={browseCategoryHref(article.category)}>{article.category}</a>
+    )}
+    <a class="article-index__link" href={article.url}>{article.title}</a>
+    {article.displayDate && <span class="article-index__meta">{article.displayDate}</span>}
+    {article.description && <p class="article-index__desc">{article.description}</p>}
+    {article.tags.length > 0 && (
+      <div class="article-index__tags">
+        {article.tags.map((tag) => (
+          <a class="article-index__tag" href={browseTagHref(tag)}>{tag}</a>
+        ))}
+      </div>
+    )}
+  </div>
+</li>

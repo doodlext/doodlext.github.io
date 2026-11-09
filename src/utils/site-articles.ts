@@ -8,6 +8,9 @@ export type SiteArticleEntry = {
   modified?: string;
   displayDate?: string;
   description?: string;
+  /** Optional image shown beside the post in article listings. */
+  previewImage?: string;
+  previewImageAlt?: string;
   /** Hide translations or other supporting posts from index-style listings. */
   hiddenFromIndex?: boolean;
   /** Trimmed strings from frontmatter `tags`. */
@@ -88,6 +91,8 @@ export async function parseArticleGlob(
         modified,
         displayDate: formatDisplayDate(modified ?? published) ?? modified ?? published,
         description,
+        previewImage: typeof fm.previewImage === "string" ? fm.previewImage.trim() || undefined : undefined,
+        previewImageAlt: typeof fm.previewImageAlt === "string" ? fm.previewImageAlt : undefined,
         hiddenFromIndex,
         tags,
         category,

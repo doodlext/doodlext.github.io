@@ -19,7 +19,37 @@ const isPaper = template === "paper";
         <pre class="citation short">{citationText}</pre>
 
         <p>BibTeX citation</p>
-        <pre class="citation long">{bibtex}</pre>
+        <div class="citation-code-block">
+          <pre class="citation long" data-bibtex>{bibtex}</pre>
+          <button
+            type="button"
+            class="citation-copy"
+            data-copy-bibtex
+            hidden
+            aria-label="Copy BibTeX citation"
+            title="Copy BibTeX citation"
+          >
+            <svg
+              class="citation-copy__icon citation-copy__icon--copy"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+            </svg>
+            <svg
+              class="citation-copy__icon citation-copy__icon--check"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+              hidden
+            >
+              <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+            </svg>
+            <span class="citation-copy__sr-only">Copy BibTeX citation</span>
+          </button>
+          <span class="citation-copy__status" data-copy-status role="status" aria-live="polite"></span>
+        </div>
       </section>
     )}
     {!isPaper &&
@@ -370,6 +400,81 @@ const isPaper = template === "paper";
   })();
 </script>
 
+<script is:inline>
+  (() => {
+    const footer =
+      document.currentScript?.closest("footer") ||
+      document.querySelector("footer.footer");
+    const copyButton = footer?.querySelector("[data-copy-bibtex]");
+    const bibtex = footer?.querySelector("[data-bibtex]");
+    if (!copyButton || !bibtex) return;
+
+    // Keep the button hidden when JavaScript is disabled; the preformatted
+    // BibTeX text remains available for normal manual selection and copying.
+    copyButton.hidden = false;
+    const status = footer.querySelector("[data-copy-status]");
+    const copyIcon = copyButton.querySelector(".citation-copy__icon--copy");
+    const checkIcon = copyButton.querySelector(".citation-copy__icon--check");
+    let resetTimer;
+
+    const copyText = async (text) => {
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return;
+        } catch {
+          // A denied clipboard permission can still have a working legacy
+          // copy command, so continue to the fallback below.
+        }
+      }
+
+      // Fallback for browsers or contexts without the async Clipboard API.
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      const activeElement = document.activeElement;
+      document.body.appendChild(textarea);
+      try {
+        textarea.select();
+        if (!document.execCommand("copy")) throw new Error("Copy command failed");
+      } finally {
+        textarea.remove();
+        activeElement?.focus({ preventScroll: true });
+      }
+    };
+
+    const resetButton = () => {
+      copyButton.classList.remove("is-copied");
+      copyButton.setAttribute("aria-label", "Copy BibTeX citation");
+      copyButton.title = "Copy BibTeX citation";
+      copyIcon?.removeAttribute("hidden");
+      checkIcon?.setAttribute("hidden", "");
+      if (status) status.textContent = "";
+    };
+
+    copyButton.addEventListener("click", async () => {
+      const text = (bibtex.textContent || "").trim();
+      if (!text) return;
+      clearTimeout(resetTimer);
+
+      try {
+        await copyText(text);
+        copyButton.classList.add("is-copied");
+        copyButton.setAttribute("aria-label", "BibTeX citation copied");
+        copyButton.title = "BibTeX citation copied";
+        copyIcon?.setAttribute("hidden", "");
+        checkIcon?.removeAttribute("hidden");
+        if (status) status.textContent = "Copied";
+        resetTimer = window.setTimeout(resetButton, 1600);
+      } catch {
+        if (status) status.textContent = "Select the BibTeX text to copy it manually.";
+      }
+    });
+  })();
+</script>
+
 <style is:global>
   .footer {
     contain: layout style;
@@ -493,6 +598,88 @@ const isPaper = template === "paper";
 
   .citation.short {
     margin-top: -4px;
+  }
+
+  .citation-code-block {
+    position: relative;
+    min-width: 0;
+    margin-top: -12px;
+  }
+
+  .citation-code-block .citation.long {
+    margin: 0;
+    padding-right: 52px;
+  }
+
+  .citation-copy {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 5px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--button-radius);
+    background: var(--surface-bg);
+    color: var(--muted-color);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+
+  .citation-copy[hidden],
+  .citation-copy__icon[hidden] {
+    display: none;
+  }
+
+  .citation-copy:hover,
+  .citation-copy:focus-visible,
+  .citation-copy.is-copied {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: var(--page-bg);
+  }
+
+  .citation-copy:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+
+  .citation-copy__icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+    fill: currentColor;
+  }
+
+  .citation-copy__sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .citation-copy__status {
+    display: block;
+    min-height: 1.5em;
+    color: var(--primary-color);
+    font-size: 0.85em;
+    line-height: 1.5;
+  }
+
+  @media print {
+    .citation-copy,
+    .citation-copy__status {
+      display: none !important;
+    }
   }
 
   .references-block .footer-heading {

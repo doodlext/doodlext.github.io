@@ -1,6 +1,6 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { browseCategoryHref, browseTagHref } from "../utils/browse-links";
+import ArticleListItem from "../components/ArticleListItem.astro";
 import { parseArticleGlob, type SiteArticleEntry } from "../utils/site-articles";
 import { getAllArticleBundleLastModifiedIso } from "../utils/article-modified";
 
@@ -192,34 +192,7 @@ const description =
               hidden
             >
               {(archiveMap.get(year) ?? []).map((a) => (
-                <li class="article-index__item" data-browse-slug={a.slug}>
-                  {a.category ? (
-                    <a
-                      class="article-index__category"
-                      href={browseCategoryHref(a.category)}
-                    >
-                      {a.category}
-                    </a>
-                  ) : null}
-                  <a class="article-index__link" href={a.url}>
-                    {a.title}
-                  </a>
-                  {a.displayDate ? (
-                    <span class="article-index__meta">{a.displayDate}</span>
-                  ) : null}
-                  {a.description ? (
-                    <p class="article-index__desc">{a.description}</p>
-                  ) : null}
-                  {a.tags.length > 0 ? (
-                    <div class="article-index__tags">
-                      {a.tags.map((t) => (
-                        <a class="article-index__tag" href={browseTagHref(t)}>
-                          {t}
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
-                </li>
+                <ArticleListItem article={a} browse />
               ))}
             </ul>
           </section>

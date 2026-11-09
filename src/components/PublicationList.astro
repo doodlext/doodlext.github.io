@@ -1,6 +1,7 @@
 ---
 import { PUBLICATIONS } from "../data/publications";
 import { SITE_AUTHOR } from "../consts";
+import PublicationLinkIcon from "./PublicationLinkIcon.astro";
 
 interface Props {
   headingLevel?: 2 | 3;
@@ -36,7 +37,10 @@ const groups = [
       {publication.links.length > 0 && (
         <div class="article-index__tags publication-links">
           {publication.links.map((link) => (
-            <a class="article-index__tag" href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
+            <a class="article-index__tag" href={link.url} target="_blank" rel="noopener noreferrer">
+              <PublicationLinkIcon url={link.url} />
+              <span>{link.label}</span>
+            </a>
           ))}
         </div>
       )}
@@ -90,6 +94,12 @@ const groups = [
 
   .publication-authors {
     font-size: 0.9375rem;
+  }
+
+  .publication-links > .article-index__tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
   }
 
   .publication-item > .publication-links {

@@ -1,6 +1,6 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { browseCategoryHref, browseTagHref } from "../utils/browse-links";
+import ArticleListItem from "../components/ArticleListItem.astro";
 import { parseArticleGlob } from "../utils/site-articles";
 import { getAllArticleBundleLastModifiedIso } from "../utils/article-modified";
 
@@ -33,40 +33,7 @@ const description =
       <section aria-labelledby="posts-heading">
         <h2 id="posts-heading">All posts</h2>
         <ul class="article-index">
-          {articles.map(
-            ({
-              url,
-              title,
-              displayDate,
-              description: desc,
-              category,
-              tags,
-            }) => (
-              <li class="article-index__item">
-                {category ? (
-                  <a class="article-index__category" href={browseCategoryHref(category)}>
-                    {category}
-                  </a>
-                ) : null}
-                <a class="article-index__link" href={url}>
-                  {title}
-                </a>
-                {displayDate ? (
-                  <span class="article-index__meta">{displayDate}</span>
-                ) : null}
-                {desc ? <p class="article-index__desc">{desc}</p> : null}
-                {tags.length > 0 ? (
-                  <div class="article-index__tags">
-                    {tags.map((t) => (
-                      <a class="article-index__tag" href={browseTagHref(t)}>
-                        {t}
-                      </a>
-                    ))}
-                  </div>
-                ) : null}
-              </li>
-            ),
-          )}
+          {articles.map((article) => <ArticleListItem article={article} />)}
         </ul>
       </section>
     )
